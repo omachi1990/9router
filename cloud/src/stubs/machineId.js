@@ -1,7 +1,14 @@
-const MACHINE_ID_SEED =
-  typeof crypto?.randomUUID === "function"
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random()}`;
+let machineIdSeed = null;
+
+function getMachineIdSeed() {
+  if (!machineIdSeed) {
+    machineIdSeed =
+      typeof crypto?.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}`;
+  }
+  return machineIdSeed;
+}
 
 function toHex(buffer) {
   return Array.from(new Uint8Array(buffer))
@@ -24,11 +31,11 @@ async function sha256Hex(value) {
 
 export async function getConsistentMachineId(salt = null) {
   const saltValue = salt || "endpoint-proxy-salt";
-  return (await sha256Hex(`${MACHINE_ID_SEED}:${saltValue}`)).substring(0, 16);
+  return (await sha256Hex(`${getMachineIdSeed()}:${saltValue}`)).substring(0, 16);
 }
 
 export async function getRawMachineId() {
-  return MACHINE_ID_SEED;
+  return getMachineIdSeed();
 }
 
 export function isBrowser() {

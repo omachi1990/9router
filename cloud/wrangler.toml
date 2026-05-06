@@ -12,7 +12,9 @@ compatibility_flags = ["nodejs_compat"]
 
 [[kv_namespaces]]
 binding = "KV"
+id = "d482e820a5434670836634c23cf7245e"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "proxy-db"
+database_id = "bfaf09bb-53ac-4e2e-9188-7d9c76a9c8e4"

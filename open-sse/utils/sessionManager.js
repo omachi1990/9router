@@ -13,19 +13,19 @@ import { MEMORY_CONFIG } from "../config/runtimeConfig.js";
 
 // Runtime storage: Key = connectionId, Value = { sessionId, lastUsed }
 const runtimeSessionStore = new Map();
+let lastCleanupAt = 0;
 
-// Periodically evict entries that haven't been used within TTL
-const cleanupInterval = setInterval(() => {
+function cleanupExpiredSessions() {
     const now = Date.now();
+    if (now - lastCleanupAt < MEMORY_CONFIG.sessionCleanupIntervalMs) return;
+    lastCleanupAt = now;
+
     for (const [key, entry] of runtimeSessionStore) {
         if (now - entry.lastUsed > MEMORY_CONFIG.sessionTtlMs) {
             runtimeSessionStore.delete(key);
         }
     }
-}, MEMORY_CONFIG.sessionCleanupIntervalMs);
-
-// Allow Node.js to exit even if interval is still active
-if (cleanupInterval.unref) cleanupInterval.unref();
+}
 
 /**
  * Get or create a session ID for the given connection.
@@ -42,6 +42,8 @@ if (cleanupInterval.unref) cleanupInterval.unref();
  * @returns {string} A stable session ID string matching binary format
  */
 export function deriveSessionId(connectionId) {
+    cleanupExpiredSessions();
+
     if (!connectionId) {
         return generateBinaryStyleId();
     }

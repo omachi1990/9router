@@ -9,11 +9,11 @@ import { getConsistentMachineId } from "../../src/shared/utils/machineId.js";
 
 // In-memory map: hash(machineId + first assistant content) → { sessionId, lastUsed }
 const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
+const SESSION_CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
 const assistantSessionMap = new Map();
 
-// Cache machine ID at module level (resolved once)
 let cachedMachineId = null;
-getConsistentMachineId().then(id => { cachedMachineId = id; });
+let lastSessionCleanupAt = 0;
 
 function hashContent(text) {
   return createHash("sha256").update(text).digest("hex").slice(0, 16);
@@ -21,6 +21,16 @@ function hashContent(text) {
 
 function generateSessionId() {
   return `sess_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function cleanupExpiredAssistantSessions() {
+  const now = Date.now();
+  if (now - lastSessionCleanupAt < SESSION_CLEANUP_INTERVAL_MS) return;
+  lastSessionCleanupAt = now;
+
+  for (const [key, entry] of assistantSessionMap) {
+    if (now - entry.lastUsed > SESSION_TTL_MS) assistantSessionMap.delete(key);
+  }
 }
 
 // Extract text content from an input item
@@ -35,6 +45,8 @@ function extractItemText(item) {
 
 // Resolve session_id from first assistant message + machineId to avoid cross-user collision
 function resolveConversationSessionId(input, machineId) {
+  cleanupExpiredAssistantSessions();
+
   const machineSessionId = machineId ? `sess_${hashContent(machineId)}` : generateSessionId();
   if (!Array.isArray(input) || input.length === 0) return machineSessionId;
 
@@ -60,14 +72,6 @@ function resolveConversationSessionId(input, machineId) {
   assistantSessionMap.set(hash, { sessionId, lastUsed: Date.now() });
   return sessionId;
 }
-
-// Cleanup expired entries periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of assistantSessionMap) {
-    if (now - entry.lastUsed > SESSION_TTL_MS) assistantSessionMap.delete(key);
-  }
-}, 10 * 60 * 1000);
 
 /**
  * Codex Executor - handles OpenAI Codex API (Responses API format)
@@ -117,6 +121,10 @@ export class CodexExecutor extends BaseExecutor {
   }
 
   async execute(args) {
+    if (!cachedMachineId) {
+      cachedMachineId = await getConsistentMachineId();
+    }
+
     // Fetch remote images before the synchronous transform/execute pipeline
     await this.prefetchImages(args.body);
     return super.execute(args);
