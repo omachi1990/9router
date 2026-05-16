@@ -421,21 +421,21 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders, kindF
     models.forEach((m) => (initialResults[m] = "testing"));
     setTestResults(initialResults);
 
-    await Promise.all(
-      models.map(async (model) => {
-        try {
-          const res = await fetch("/api/models/test", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ model, kind: kindFilter === "media" ? "embedding" : "chat" }),
-          });
-          const data = await res.json();
-          setTestResults((prev) => ({ ...prev, [model]: data.ok ? "ok" : "error" }));
-        } catch {
-          setTestResults((prev) => ({ ...prev, [model]: "error" }));
-        }
-      })
-    );
+    for (const model of models) {
+      try {
+        const res = await fetch("/api/models/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model, kind: kindFilter === "media" ? "embedding" : "chat" }),
+        });
+        const data = await res.json();
+        setTestResults((prev) => ({ ...prev, [model]: data.ok ? "ok" : "error" }));
+      } catch {
+        setTestResults((prev) => ({ ...prev, [model]: "error" }));
+      }
+      // Small delay between tests to prevent hitting local proxy or remote rate limits
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
     setIsTestingAll(false);
   };
 
