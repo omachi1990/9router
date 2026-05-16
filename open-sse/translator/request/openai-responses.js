@@ -165,8 +165,23 @@ export function openaiResponsesToOpenAIRequest(model, body, stream, credentials)
  */
 function normalizeToolParameters(params) {
   if (!params) return { type: "object", properties: {} };
-  if (params.type === "object" && !params.properties) return { ...params, properties: {} };
-  return params;
+  let sanitized = { ...params };
+  // Remove top-level logical operators that OpenAI Codex rejects
+  delete sanitized.oneOf;
+  delete sanitized.anyOf;
+  delete sanitized.allOf;
+  delete sanitized.not;
+  delete sanitized.enum;
+  
+  if (sanitized.type !== "object") {
+    // Force object type if it's missing or different, putting existing fields in properties might not make sense, 
+    // but at least we must make it type: object
+    sanitized.type = "object";
+  }
+  if (!sanitized.properties) {
+    sanitized.properties = {};
+  }
+  return sanitized;
 }
 
 /**

@@ -343,23 +343,27 @@ amp --model "{{model}}"
       { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro", alias: "gemini", defaultValue: "gemini/gemini-3.1-pro" },
     ],
   },
-  // HIDDEN: gemini-cli
-  // "gemini-cli": {
-  //   id: "gemini-cli",
-  //   name: "Gemini CLI",
-  //   icon: "terminal",
-  //   color: "#4285F4",
-  //   description: "Google Gemini CLI",
-  //   configType: "env",
-  //   envVars: {
-  //     baseUrl: "GEMINI_API_BASE_URL",
-  //     model: "GEMINI_MODEL",
-  //   },
-  //   defaultModels: [
-  //     { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", alias: "pro" },
-  //     { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", alias: "flash" },
-  //   ],
-  // },
+  "gemini-cli": {
+    id: "gemini-cli",
+    name: "Gemini CLI",
+    icon: "terminal",
+    color: "#4285F4",
+    description: "Google Gemini CLI",
+    configType: "env",
+    envVars: {
+      baseUrl: "GEMINI_API_BASE_URL",
+      model: "GEMINI_MODEL",
+    },
+    defaultModels: [
+      { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", alias: "pro" },
+      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", alias: "flash" },
+    ],
+    guideSteps: [
+      { step: 1, title: "Select API Key", type: "apiKeySelector" },
+      { step: 2, title: "Select Model", type: "modelSelector" },
+      { step: 3, title: "Export Environment Variables", desc: "Run these commands in your terminal or add them to your shell profile (~/.bashrc or ~/.zshrc):", value: "export GEMINI_API_KEY={{apiKey}}\nexport GEMINI_API_BASE_URL={{baseUrl}}\nexport GEMINI_MODEL={{model}}", copyable: true },
+    ],
+  },
 };
 
 // Get all provider models for mapping dropdown

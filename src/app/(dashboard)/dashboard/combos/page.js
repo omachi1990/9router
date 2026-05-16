@@ -287,7 +287,7 @@ function ComboCard({ combo, copied, onCopy, onEdit, onDelete, roundRobinEnabled,
   );
 }
 
-function ModelItem({ id, index, model, isFirst, isLast, onEdit, onMoveUp, onMoveDown, onRemove }) {
+function ModelItem({ id, index, model, testStatus, isFirst, isLast, onEdit, onMoveUp, onMoveDown, onRemove }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -309,11 +309,14 @@ function ModelItem({ id, index, model, isFirst, isLast, onEdit, onMoveUp, onMove
     if (e.key === "Escape") { setDraft(model); setEditing(false); }
   };
 
+  const statusIcon = testStatus === "ok" ? "check_circle" : testStatus === "error" ? "cancel" : testStatus === "testing" ? "hourglass_empty" : null;
+  const statusColor = testStatus === "ok" ? "text-green-500" : testStatus === "error" ? "text-red-500" : testStatus === "testing" ? "text-blue-500" : "";
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`group flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 bg-black/[0.02] hover:bg-black/[0.04] dark:bg-white/[0.02] dark:hover:bg-white/[0.04] transition-colors ${isDragging ? "shadow-md ring-1 ring-primary/30" : ""}`}
+      className={`group flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 bg-black/[0.02] hover:bg-black/[0.04] dark:bg-white/[0.02] dark:hover:bg-white/[0.04] transition-colors ${isDragging ? "shadow-md ring-1 ring-primary/30" : ""} ${testStatus === "error" ? "ring-1 ring-red-500/40" : ""}`}
     >
       {/* Drag handle */}
       <button
@@ -350,6 +353,13 @@ function ModelItem({ id, index, model, isFirst, isLast, onEdit, onMoveUp, onMove
           title="Click to edit"
         >
           {model}
+        </div>
+      )}
+
+      {/* Test Status Icon */}
+      {statusIcon && (
+        <div className={`shrink-0 flex items-center justify-center w-5 ${statusColor}`} title={testStatus}>
+          <span className={`material-symbols-outlined text-[14px] ${testStatus === "testing" ? "animate-spin" : ""}`}>{statusIcon}</span>
         </div>
       )}
 
@@ -393,6 +403,8 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders, kindF
   const [saving, setSaving] = useState(false);
   const [nameError, setNameError] = useState("");
   const [modelAliases, setModelAliases] = useState({});
+  const [testResults, setTestResults] = useState({});
+  const [isTestingAll, setIsTestingAll] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -401,6 +413,42 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders, kindF
 
   // Use stable index-based IDs so duplicates and similar names are handled correctly
   const modelItems = models.map((model, i) => ({ uid: `item-${i}`, model }));
+
+  const handleTestAll = async () => {
+    if (models.length === 0 || isTestingAll) return;
+    setIsTestingAll(true);
+    const initialResults = {};
+    models.forEach((m) => (initialResults[m] = "testing"));
+    setTestResults(initialResults);
+
+    await Promise.all(
+      models.map(async (model) => {
+        try {
+          const res = await fetch("/api/models/test", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model, kind: kindFilter === "media" ? "embedding" : "chat" }),
+          });
+          const data = await res.json();
+          setTestResults((prev) => ({ ...prev, [model]: data.ok ? "ok" : "error" }));
+        } catch {
+          setTestResults((prev) => ({ ...prev, [model]: "error" }));
+        }
+      })
+    );
+    setIsTestingAll(false);
+  };
+
+  const handleRemoveFailed = () => {
+    setModels((prev) => prev.filter((m) => testResults[m] !== "error"));
+    setTestResults((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach(k => {
+        if (next[k] === "error") delete next[k];
+      });
+      return next;
+    });
+  };
 
   const handleDragEnd = (event) => {
     const { active, over } = event;
@@ -526,6 +574,7 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders, kindF
                       id={uid}
                       index={index}
                       model={model}
+                      testStatus={testResults[model]}
                       isFirst={index === 0}
                       isLast={index === modelItems.length - 1}
                       onEdit={(newVal) => {
@@ -543,14 +592,36 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders, kindF
             </DndContext>
             )}
 
-            {/* Add Model button */}
-            <button
-              onClick={() => setShowModelSelect(true)}
-              className="w-full mt-2 py-2 border border-dashed border-black/10 dark:border-white/10 rounded-lg text-xs text-primary font-medium hover:text-primary hover:border-primary/50 transition-colors flex items-center justify-center gap-1"
-            >
-              <span className="material-symbols-outlined text-[16px]">add</span>
-              Add Model
-            </button>
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={() => setShowModelSelect(true)}
+                className="flex-1 py-2 border border-dashed border-black/10 dark:border-white/10 rounded-lg text-xs text-primary font-medium hover:text-primary hover:border-primary/50 transition-colors flex items-center justify-center gap-1"
+              >
+                <span className="material-symbols-outlined text-[16px]">add</span>
+                Add Model
+              </button>
+              {models.length > 0 && (
+                <button
+                  onClick={handleTestAll}
+                  disabled={isTestingAll}
+                  className="flex-1 py-2 border border-dashed border-black/10 dark:border-white/10 rounded-lg text-xs text-blue-500 font-medium hover:text-blue-600 hover:border-blue-500/50 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    {isTestingAll ? "hourglass_empty" : "science"}
+                  </span>
+                  {isTestingAll ? "Testing..." : "Test Models"}
+                </button>
+              )}
+            </div>
+            {Object.values(testResults).includes("error") && (
+              <button
+                onClick={handleRemoveFailed}
+                className="w-full mt-2 py-1.5 bg-red-500/10 text-red-500 rounded-lg text-xs font-medium hover:bg-red-500/20 transition-colors flex items-center justify-center gap-1"
+              >
+                <span className="material-symbols-outlined text-[14px]">delete</span>
+                Remove Failed Models
+              </button>
+            )}
           </div>
 
           {/* Actions */}
