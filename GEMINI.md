@@ -28,7 +28,17 @@ This document provides context for AI agents working on the 9router project to e
 5.  **Running & Testing**:
     *   The project uses `npm run build` and runs via `pm2` using the built standalone server (`node .next/standalone/server.js`).
     *   Always verify changes by building and checking PM2 logs (`pm2 logs 9router`).
-6.  **Git Workflow**: The project tracks the upstream repository (`origin`) and a custom fork (`custom`). When fetching updates from upstream, always commit local custom features first, pull with `--no-rebase`, and resolve any conflicts before building.
+6.  **Git & Update Workflow**: This project uses a manual update process to ensure stability. **DO NOT** implement any form of automatic updates.
+    *   **Remotes**: The repository tracks two remotes:
+        *   `origin`: The original author's repository (`decolua/9router`).
+        *   `custom`: The user's private fork (`omachi1990/9router-gemini-CLI`) where custom features are stored.
+    *   **Update Procedure**: When the user requests an update from the original author, follow these steps strictly:
+        1.  Commit all local custom changes first.
+        2.  Pull from the upstream master: `git pull origin master --no-rebase`.
+        3.  Manually resolve any merge conflicts if they occur.
+        4.  Run `npm install` and `npm run build` to ensure compatibility.
+        5.  Restart the application via `pm2 restart 9router`.
+        6.  Push the final merged code to the `custom` remote.
 
 ## Recent Custom Features
 
