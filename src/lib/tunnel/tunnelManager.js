@@ -110,11 +110,12 @@ export async function enableTunnel(localPort = 20128) {
     const shortId = existing?.shortId || generateShortId();
 
     const tunnelToken = process.env.TUNNEL_TOKEN;
+    const tunnelPublicUrl = process.env.TUNNEL_PUBLIC_URL || "private";
     if (tunnelToken) {
       console.log("[Tunnel] using private tunnel token");
       await spawnCloudflared(tunnelToken);
-      saveState({ shortId: "private", machineId, tunnelUrl: "private" });
-      await updateSettings({ tunnelEnabled: true, tunnelUrl: "private" });
+      saveState({ shortId: "private", machineId, tunnelUrl: tunnelPublicUrl });
+      await updateSettings({ tunnelEnabled: true, tunnelUrl: tunnelPublicUrl });
 
       tunnelReachable.value = true;
       tunnelReachable.url = `http://localhost:${localPort}`;
