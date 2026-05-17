@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { loadState, saveState, generateShortId } from "./state.js";
-import { spawnQuickTunnel, killCloudflared, isCloudflaredRunning, setUnexpectedExitHandler } from "./cloudflared.js";
+import { spawnQuickTunnel, spawnCloudflared, killCloudflared, isCloudflaredRunning, setUnexpectedExitHandler } from "./cloudflared.js";
 import { startFunnel, stopFunnel, isTailscaleRunning, isTailscaleRunningStrict, isTailscaleLoggedIn, startLogin, startDaemonWithPassword, provisionCert } from "./tailscale.js";
 import { getSettings, updateSettings } from "@/lib/localDb";
 import { getCachedPassword, loadEncryptedPassword, initDbHooks } from "@/mitm/manager";
@@ -108,6 +108,21 @@ export async function enableTunnel(localPort = 20128) {
     const machineId = getMachineId();
     const existing = loadState();
     const shortId = existing?.shortId || generateShortId();
+
+    const tunnelToken = process.env.TUNNEL_TOKEN;
+    if (tunnelToken) {
+      console.log("[Tunnel] using private tunnel token");
+      await spawnCloudflared(tunnelToken);
+      saveState({ shortId: "private", machineId, tunnelUrl: "private" });
+      await updateSettings({ tunnelEnabled: true, tunnelUrl: "private" });
+
+      tunnelReachable.value = true;
+      tunnelReachable.url = `http://localhost:${localPort}`;
+      tunnelReachable.fetchedAt = Date.now();
+
+      console.log("[Tunnel] private tunnel enabled");
+      return { success: true, tunnelUrl: "private", shortId: "private", publicUrl: "Managed by Cloudflare" };
+    }
 
     const onUrlUpdate = async (url) => {
       if (token.cancelled) return;
