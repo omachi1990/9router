@@ -22,26 +22,20 @@ export default function ComboPathVisualizer({ path }) {
     <div className="flex items-center gap-1.5 overflow-hidden">
       {path.map((step, index) => (
         <React.Fragment key={index}>
-          <div className="flex flex-col items-center text-xs min-w-0">
-            <div className="flex items-center gap-1 min-w-0">
+          <div className="flex flex-col items-center text-xs ">
+            <div className="flex items-center gap-0.5">
               {renderStatusIcon(step.status)}
-              <span className="font-mono truncate max-w-[150px] font-medium" title={step.model}>{step.model}</span>
+              <span className="font-mono truncate max-w-[120px]">{step.model}</span>
             </div>
-            {step.accountName && (
-              <span className="text-[10px] text-text-muted truncate max-w-[120px] opacity-80" title={step.accountName}>
-                {step.accountName}
-              </span>
-            )}
-            <span className="text-[10px] text-text-muted font-mono">{step.latency}ms</span>
+            <span className="text-text-muted">{step.latency}ms</span>
           </div>
           {index < path.length - 1 && (
             <span className="material-symbols-outlined text-sm text-text-muted -mx-1">
               arrow_forward_ios
             </span>
           )}
-        </React.Fragment>
+        </React.Fragmen>
       ))}
     </div>
   );
 }
-

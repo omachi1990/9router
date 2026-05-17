@@ -123,35 +123,26 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
       const result = await handleSingleModel(body, modelStr);
       const attemptLatency = Date.now() - attemptStartTime;
       
-      // Support both raw Response and { response, accountName } object
-      const response = result instanceof Response ? result : result?.response;
-      const accountName = result?.accountName || null;
-
       // Success (2xx) - return response
-      if (response && response.ok) {
+      if (result.ok) {
         log.info("COMBO", `Model ${modelStr} succeeded`);
-        comboPath.push({ model: modelStr, status: "success", latency: attemptLatency, accountName });
-        
-        // Attach comboPath to response if possible for logging
-        if (result instanceof Response) return result;
-        return response;
+        comboPath.push({ model: modelStr, status: "success", latency: attemptLatency });
+        return result; 
       }
 
       // Extract error info from response
-      let errorText = response?.statusText || "";
+      let errorText = result.statusText || "";
       let retryAfter = null;
-      if (response) {
-        try {
-          const errorBody = await response.clone().json();
-          errorText = errorBody?.error?.message || errorBody?.error || errorBody?.message || errorText;
-          retryAfter = errorBody?.retryAfter || null;
-        } catch {
-          // Ignore JSON parse errors
-        }
+      try {
+        const errorBody = await result.clone().json();
+        errorText = errorBody?.error?.message || errorBody?.error || errorBody?.message || errorText;
+        retryAfter = errorBody?.retryAfter || null;
+      } catch {
+        // Ignore JSON parse errors
       }
-      const statusCode = response?.status || 500;
+      const statusCode = result.status || 500;
 
-      comboPath.push({ model: modelStr, status: "failed", latency: attemptLatency, error: errorText, statusCode, accountName });
+      comboPath.push({ model: modelStr, status: "failed", latency: attemptLatency, error: errorText, statusCode });
 
       // Track earliest retryAfter across all combo models
       if (retryAfter && (!earliestRetryAfter || new Date(retryAfter) < new Date(earliestRetryAfter))) {

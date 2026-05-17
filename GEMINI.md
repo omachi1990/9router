@@ -30,7 +30,7 @@ This document provides context for AI agents working on the 9router project to e
     *   Always verify changes by building and checking PM2 logs (`pm2 logs 9router`).
 6.  **Git Workflow**: The project tracks the upstream repository (`origin`) and a custom fork (`custom`). When fetching updates from upstream, always commit local custom features first, pull with `--no-rebase`, and resolve any conflicts before building.
 
-## Recent Custom Features (Beta / Incomplete)
+## Recent Custom Features
 
-*   **Combo Path Visualizer** (`ComboPathVisualizer.js`): Intended to display API Key names and visualize fallback logic. **STATUS: Incomplete/Unstable.** Fix syntax errors carefully.
-*   **Request Details Tab** (`RequestDetailsTab.js`): Intended for enhanced monitoring. **STATUS: Incomplete.** Large component, avoid complex edits that may hang the build or shell.
+*   **Combo Path Visualizer** (`ComboPathVisualizer.js`): Fully functional. Displays model names, API key/account names, and latencies for each step in a fallback combo path.
+*   **Request Details Tab** (`RequestDetailsTab.js`): Fully functional and optimized. Provides a comprehensive view of request history, including request/provider-response bodies and execution paths. Refactored into smaller components for better maintainability.
