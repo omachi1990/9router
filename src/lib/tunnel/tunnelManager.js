@@ -183,7 +183,12 @@ export async function getTunnelStatus() {
   const settingsEnabled = settings.tunnelEnabled === true;
   const state = loadState();
   const shortId = state?.shortId || "";
-  const publicUrl = shortId ? `https://r${shortId}.abc-tunnel.us` : "";
+  
+  let publicUrl = process.env.TUNNEL_PUBLIC_URL || "";
+  if (!publicUrl && shortId && shortId !== "private") {
+    publicUrl = `https://r${shortId}.abc-tunnel.us`;
+  }
+  
   const tunnelUrl = state?.tunnelUrl || "";
 
   // Lazy: skip PID probe entirely when user disabled tunnel
