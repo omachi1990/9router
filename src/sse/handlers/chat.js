@@ -106,7 +106,10 @@ export async function handleChat(request, clientRawRequest = null) {
       models: comboModels,
       handleSingleModel: async (b, m) => {
         const result = await handleSingleModelChat(b, m, clientRawRequest, request, apiKey);
-        return result.response || result;
+        return { 
+          response: result.response || result,
+          accountName: result.accountName
+        };
       },
       log,
       comboName: modelStr,
@@ -118,7 +121,7 @@ export async function handleChat(request, clientRawRequest = null) {
   // Single model request
   const result = await handleSingleModelChat(body, modelStr, clientRawRequest, request, apiKey);
   return result.response || result;
-  }
+}
 
   /**
   * Handle single model chat request
@@ -140,21 +143,26 @@ export async function handleChat(request, clientRawRequest = null) {
       log.info("CHAT", `Combo "${modelStr}" with ${comboModels.length} models (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
 
       // handleComboChat returns a Response object
-      return await handleComboChat({
+      const result = await handleComboChat({
         body,
         models: comboModels,
         handleSingleModel: async (b, m) => {
           const res = await handleSingleModelChat(b, m, clientRawRequest, request, apiKey, comboPath);
-          return res.response || res;
+          return {
+            response: res.response || res,
+            accountName: res.accountName
+          };
         },
         log,
         comboName: modelStr,
         comboStrategy,
         comboStickyLimit
       });
+      // Propagate comboPath from handleComboChat
+      return { response: result, comboPath: result.comboPath || comboPath };
     }
     log.warn("CHAT", "Invalid model format", { model: modelStr });
-    return errorResponse(HTTP_STATUS.BAD_REQUEST, "Invalid model format");
+    return { response: errorResponse(HTTP_STATUS.BAD_REQUEST, "Invalid model format") };
   }
 
   const { provider, model } = modelInfo;
@@ -183,14 +191,15 @@ export async function handleChat(request, clientRawRequest = null) {
         const errorMsg = lastError || credentials.lastError || "Unavailable";
         const status = lastStatus || Number(credentials.lastErrorCode) || HTTP_STATUS.SERVICE_UNAVAILABLE;
         log.warn("CHAT", `[${provider}/${model}] ${errorMsg} (${credentials.retryAfterHuman})`);
-        return unavailableResponse(status, `[${provider}/${model}] ${errorMsg}`, credentials.retryAfter, credentials.retryAfterHuman);
+        const response = unavailableResponse(status, `[${provider}/${model}] ${errorMsg}`, credentials.retryAfter, credentials.retryAfterHuman);
+        return { response, comboPath };
       }
       if (excludeConnectionIds.size === 0) {
         log.warn("AUTH", `No active credentials for provider: ${provider}`);
-        return errorResponse(HTTP_STATUS.NOT_FOUND, `No active credentials for provider: ${provider}`);
+        return { response: errorResponse(HTTP_STATUS.NOT_FOUND, `No active credentials for provider: ${provider}`), comboPath };
       }
       log.warn("CHAT", "No more accounts available", { provider });
-      return errorResponse(lastStatus || HTTP_STATUS.SERVICE_UNAVAILABLE, lastError || "All accounts unavailable");
+      return { response: errorResponse(lastStatus || HTTP_STATUS.SERVICE_UNAVAILABLE, lastError || "All accounts unavailable"), comboPath };
     }
 
     // Log account selection
@@ -242,7 +251,7 @@ export async function handleChat(request, clientRawRequest = null) {
       }
     });
 
-    if (result.success) return result.response;
+    if (result.success) return { response: result.response, accountName: credentials.connectionName };
 
     // Mark account unavailable (auto-calculates cooldown with exponential backoff, or precise resetsAtMs)
     const { shouldFallback } = await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model, result.resetsAtMs);
@@ -255,6 +264,6 @@ export async function handleChat(request, clientRawRequest = null) {
       continue;
     }
 
-    return result.response;
+    return { response: result.response, accountName: credentials.connectionName };
   }
-  }
+}

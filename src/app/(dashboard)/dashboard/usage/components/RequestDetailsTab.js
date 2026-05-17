@@ -7,79 +7,46 @@ import Drawer from "@/shared/components/Drawer";
 import Pagination from "@/shared/components/Pagination";
 import { cn } from "@/shared/utils/cn";
 import { AI_PROVIDERS, getProviderByAlias } from "@/shared/constants/providers";
+import CollapsibleSection from "./CollapsibleSection";
+import ComboPathVisualizer from "./ComboPathVisualizer";
 
-let providerNameCache = null;
-let providerNodesCache = null;
+let providerNameCacheInternal = null;
 
 async function fetchProviderNames() {
-  if (providerNameCache && providerNodesCache) {
-    return { providerNameCache, providerNodesCache };
+  if (providerNameCacheInternal) return providerNameCacheInternal;
+
+  try {
+    const nodesRes = await fetch("/api/provider-nodes");
+    const nodesData = await nodesRes.json();
+    const nodes = nodesData.nodes || [];
+    const providerNodesCache = {};
+
+    for (const node of nodes) {
+      providerNodesCache[node.id] = node.name;
+    }
+
+    providerNameCacheInternal = {
+      ...AI_PROVIDERS,
+      ...providerNodesCache
+    };
+
+    return providerNameCacheInternal;
+  } catch (error) {
+    console.error("Failed to fetch provider names:", error);
+    return AI_PROVIDERS;
   }
-
-  const nodesRes = await fetch("/api/provider-nodes");
-  const nodesData = await nodesRes.json();
-  const nodes = nodesData.nodes || [];
-  providerNodesCache = {};
-
-  for (const node of nodes) {
-    providerNodesCache[node.id] = node.name;
-  }
-
-  providerNameCache = {
-    ...AI_PROVIDERS,
-    ...providerNodesCache
-  };
-
-  return { providerNameCache, providerNodesCache };
 }
 
 function getProviderName(providerId, cache) {
   if (!providerId) return providerId;
-  if (!cache) return providerId;
+  const currentCache = cache || providerNameCacheInternal || AI_PROVIDERS;
+  const cached = currentCache[providerId];
 
-  const cached = cache[providerId];
-
-  if (typeof cached === 'string') {
-    return cached;
-  }
-
-  if (cached?.name) {
-    return cached.name;
-  }
+  if (typeof cached === 'string') return cached;
+  if (cached?.name) return cached.name;
 
   const providerConfig = getProviderByAlias(providerId) || AI_PROVIDERS[providerId];
   return providerConfig?.name || providerId;
-}
-
-function CollapsibleSection({ title, children, defaultOpen = false, icon = null }) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  
-  return (
-    <div className="border border-black/5 dark:border-white/5 rounded-lg overflow-hidden">
-      <button 
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between p-3 bg-black/[0.02] dark:bg-white/[0.02] hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          {icon && <span className="material-symbols-outlined text-[18px] text-text-muted">{icon}</span>}
-          <span className="font-semibold text-sm text-text-main">{title}</span>
-        </div>
-        <span className={cn(
-          "material-symbols-outlined text-[20px] text-text-muted transition-transform duration-200",
-          isOpen ? "rotate-90" : ""
-        )}>
-          chevron_right
-        </span>
-      </button>
-      
-      {isOpen && (
-        <div className="p-4 border-t border-black/5 dark:border-white/5">
-          {children}
-        </div>
-      )}
-    </div>
-  );
 }
 
 function getInputTokens(tokens) {
@@ -145,27 +112,15 @@ export default function RequestDetailsTab() {
 
   useEffect(() => {
     fetchProviders();
-  }, [fetchProviders]);
+  }, []); // Run only once on mount
 
   useEffect(() => {
     fetchDetails();
-  }, [fetchDetails]);
+  }, [fetchDetails]); // Relies on useCallback to prevent re-renders
 
   const handleViewDetail = (detail) => {
     setSelectedDetail(detail);
     setIsDrawerOpen(true);
-  };
-
-  const handlePageChange = (newPage) => {
-    setPagination(prev => ({ ...prev, page: newPage }));
-  };
-
-  const handlePageSizeChange = (newPageSize) => {
-    setPagination(prev => ({ ...prev, pageSize: newPageSize, page: 1 }));
-  };
-
-  const handleClearFilters = () => {
-    setFilters({ provider: "", startDate: "", endDate: "" });
   };
 
   return (
@@ -335,97 +290,51 @@ export default function RequestDetailsTab() {
         width="lg"
       >
         {selectedDetail && (
-          <div className="space-y-6">
-            <div className="grid min-w-0 grid-cols-1 gap-4 text-sm sm:grid-cols-2">
-              <div>
-                <span className="text-text-muted">ID:</span>{" "}
-                <span className="break-all font-mono text-text-main">{selectedDetail.id}</span>
-              </div>
-              <div>
-                <span className="text-text-muted">Timestamp:</span>{" "}
-                <span className="text-text-main">{new Date(selectedDetail.timestamp).toLocaleString()}</span>
-              </div>
-              <div>
-                 <span className="text-text-muted">Provider:</span>{" "}
-                 <span className="text-text-main font-medium">{getProviderName(selectedDetail.provider, providerNameCache)}</span>
-               </div>
-              <div>
-                <span className="text-text-muted">Model:</span>{" "}
-                <span className="text-text-main font-mono">{selectedDetail.model}</span>
-              </div>
-              <div>
-                <span className="text-text-muted">Status:</span>{" "}
-                <span className={cn(
-                  "font-medium",
-                  selectedDetail.status === "success" ? "text-green-600" : "text-red-600"
-                )}>
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-text-muted">Status</span>
+                <span className={`font-semibold ${selectedDetail.status === 'success' ? 'text-green-500' : 'text-red-500'}`}>
                   {selectedDetail.status}
                 </span>
               </div>
-              <div>
-                <span className="text-text-muted">Latency:</span>{" "}
-                <span className="text-text-main font-mono">
-                  TTFT {selectedDetail.latency?.ttft || 0}ms / Total {selectedDetail.latency?.total || 0}ms
-                </span>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-text-muted">Provider</span>
+                <span>{getProviderName(selectedDetail.provider, providerNameCache)}</span>
               </div>
-              <div>
-                <span className="text-text-muted">Input Tokens:</span>{" "}
-                <span className="text-text-main font-mono">
-                  {getInputTokens(selectedDetail.tokens).toLocaleString()}
-                </span>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-text-muted">Total Latency</span>
+                <span>{selectedDetail.latency?.total || 0} ms</span>
               </div>
-              <div>
-                <span className="text-text-muted">Output Tokens:</span>{" "}
-                <span className="text-text-main font-mono">
-                  {selectedDetail.tokens?.completion_tokens?.toLocaleString() || 0}
-                </span>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-text-muted">Tokens</span>
+                <span>{`In: ${getInputTokens(selectedDetail.tokens)} / Out: ${selectedDetail.tokens?.completion_tokens?.toLocaleString() || 0}`}</span>
               </div>
             </div>
-            
-            <div className="space-y-4">
-              <CollapsibleSection title="1. Client Request (Input)" defaultOpen={true} icon="input">
-                <pre className="max-h-[300px] max-w-full overflow-auto rounded-lg border border-black/5 bg-black/5 p-3 font-mono text-xs text-text-main dark:border-white/5 dark:bg-white/5 sm:p-4">
+
+            {selectedDetail.comboPath && selectedDetail.comboPath.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <span className="text-xs text-text-muted font-semibold">Execution Path</span>
+                <div className="p-3 rounded-lg bg-black/5 dark:bg-white/5">
+                  <ComboPathVisualizer path={selectedDetail.comboPath} />
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-3">
+              <CollapsibleSection title="Request Body" icon="input">
+                <pre className="text-xs bg-black/5 dark:bg-white/5 sm:p-4 p-2 rounded-lg overflow-x-auto">
                   {JSON.stringify(selectedDetail.request, null, 2)}
                 </pre>
               </CollapsibleSection>
-
-              {selectedDetail.providerRequest && (
-                <CollapsibleSection title="2. Provider Request (Translated)" icon="translate">
-                  <pre className="max-h-[300px] max-w-full overflow-auto rounded-lg border border-black/5 bg-black/5 p-3 font-mono text-xs text-text-main dark:border-white/5 dark:bg-white/5 sm:p-4">
-                    {JSON.stringify(selectedDetail.providerRequest, null, 2)}
-                  </pre>
-                </CollapsibleSection>
-              )}
-
-              {selectedDetail.providerResponse && (
-                <CollapsibleSection title="3. Provider Response (Raw)" icon="data_object">
-                  <pre className="max-h-[300px] max-w-full overflow-auto rounded-lg border border-black/5 bg-black/5 p-3 font-mono text-xs text-text-main dark:border-white/5 dark:bg-white/5 sm:p-4">
-                    {typeof selectedDetail.providerResponse === 'object'
-                      ? JSON.stringify(selectedDetail.providerResponse, null, 2)
-                      : selectedDetail.providerResponse
-                    }
-                  </pre>
-                </CollapsibleSection>
-              )}
-              
-              <CollapsibleSection title="4. Client Response (Final)" defaultOpen={true} icon="output">
-                {selectedDetail.response?.thinking && (
-                  <div className="mb-4">
-                    <h4 className="font-semibold text-text-main mb-2 flex items-center gap-2 text-xs uppercase tracking-wide opacity-70">
-                      <span className="material-symbols-outlined text-[16px]">psychology</span>
-                      Thinking Process
-                    </h4>
-                    <pre className="max-h-[200px] max-w-full overflow-auto rounded-lg border border-amber-200 bg-amber-50 p-3 font-mono text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100 sm:p-4">
-                      {selectedDetail.response.thinking}
-                    </pre>
-                  </div>
-                )}
-                
-                <h4 className="font-semibold text-text-main mb-2 text-xs uppercase tracking-wide opacity-70">
-                  Content
-                </h4>
-                <pre className="max-h-[300px] max-w-full overflow-auto rounded-lg border border-black/5 bg-black/5 p-3 font-mono text-xs text-text-main dark:border-white/5 dark:bg-white/5 sm:p-4">
-                  {selectedDetail.response?.content || "[No content]"}
+              <CollapsibleSection title="Provider Request Body" icon="send">
+                <pre className="text-xs bg-black/5 dark:bg-white/5 sm:p-4 p-2 rounded-lg overflow-x-auto">
+                  {JSON.stringify(selectedDetail.providerRequest, null, 2)}
+                </pre>
+              </CollapsibleSection>
+              <CollapsibleSection title="Provider Response Body" icon="output">
+                <pre className="text-xs bg-black/5 dark:bg-white/5 sm:p-4 p-2 rounded-lg overflow-x-auto">
+                  {JSON.stringify(selectedDetail.providerResponse || selectedDetail.response, null, 2)}
                 </pre>
               </CollapsibleSection>
             </div>
