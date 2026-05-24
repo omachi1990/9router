@@ -372,7 +372,7 @@ amp --model "{{model}}"
     icon: "rocket_launch",
     color: "#F59E0B",
     description: "Google Antigravity CLI Tool",
-    configType: "guide",
+    configType: "custom",
     notes: [
       { type: "info", text: "Requests from Antigravity CLI will automatically be routed to the Antigravity provider by prefixing the model with 'antigravity/'." },
     ],
