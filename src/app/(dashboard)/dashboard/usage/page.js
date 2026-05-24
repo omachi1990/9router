@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { UsageStats, RequestLogger, CardSkeleton, SegmentedControl } from "@/shared/components";
 import RequestDetailsTab from "./components/RequestDetailsTab";
+import ComboUsageStats from "./components/ComboUsageStats";
 
 const PERIODS = [
   { value: "today", label: "Today" },
@@ -64,9 +65,12 @@ function UsageContent() {
       </div>
 
       {activeTab === "overview" && (
-        <Suspense fallback={<CardSkeleton />}>
-          <UsageStats period={period} setPeriod={setPeriod} hidePeriodSelector />
-        </Suspense>
+        <div className="flex flex-col gap-6">
+          <Suspense fallback={<CardSkeleton />}>
+            <UsageStats period={period} setPeriod={setPeriod} hidePeriodSelector />
+          </Suspense>
+          <ComboUsageStats />
+        </div>
       )}
       {activeTab === "logs" && <RequestLogger />}
       {activeTab === "details" && <RequestDetailsTab />}
