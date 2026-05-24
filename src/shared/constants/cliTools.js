@@ -366,6 +366,29 @@ amp --model "{{model}}"
       { step: 3, title: "Export Environment Variables", desc: "Run these commands in your terminal or add them to your shell profile (~/.bashrc or ~/.zshrc):", value: "export GEMINI_API_KEY={{apiKey}}\nexport GEMINI_API_BASE_URL={{baseUrl}}\nexport GEMINI_MODEL={{model}}", copyable: true },
     ],
   },
+  "antigravity-cli": {
+    id: "antigravity-cli",
+    name: "Antigravity CLI",
+    icon: "rocket_launch",
+    color: "#F59E0B",
+    description: "Google Antigravity CLI Tool",
+    configType: "guide",
+    notes: [
+      { type: "info", text: "Requests from Antigravity CLI will automatically be routed to the Antigravity provider by prefixing the model with 'antigravity/'." },
+    ],
+    defaultModels: [
+      { id: "antigravity/gemini-3-flash-agent", name: "Gemini 3.5 Flash (High)", alias: "gemini-3-flash-agent" },
+      { id: "antigravity/gemini-pro-agent", name: "Gemini 3.1 Pro (High)", alias: "gemini-pro-agent" },
+      { id: "antigravity/claude-sonnet-4-6", name: "Claude Sonnet 4.6 (Thinking)", alias: "claude-sonnet-4-6" },
+      { id: "antigravity/claude-opus-4-6-thinking", name: "Claude Opus 4.6 (Thinking)", alias: "claude-opus-4-6-thinking" },
+      { id: "antigravity/gpt-oss-120b-medium", name: "GPT-OSS 120B (Medium)", alias: "gpt-oss-120b-medium" },
+    ],
+    guideSteps: [
+      { step: 1, title: "Select API Key", type: "apiKeySelector" },
+      { step: 2, title: "Select Model", type: "modelSelector" },
+      { step: 3, title: "Export Environment Variables", desc: "Run these commands in your terminal to point Antigravity CLI to 9Router:", value: "export ANTIGRAVITY_API_KEY={{apiKey}}\nexport ANTIGRAVITY_BASE_URL={{baseUrl}}\nexport ANTIGRAVITY_MODEL={{model}}", copyable: true },
+    ],
+  },
 };
 
 // Get all provider models for mapping dropdown
