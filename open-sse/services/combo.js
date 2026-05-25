@@ -112,30 +112,46 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
   let lastError = null;
   let earliestRetryAfter = null;
   let lastStatus = null;
+  const comboPath = []; // Initialize comboPath array
 
   for (let i = 0; i < rotatedModels.length; i++) {
     const modelStr = rotatedModels[i];
     log.info("COMBO", `Trying model ${i + 1}/${rotatedModels.length}: ${modelStr}`);
+    const attemptStartTime = Date.now(); // Record start time for latency
 
     try {
       const result = await handleSingleModel(body, modelStr);
+      const attemptLatency = Date.now() - attemptStartTime;
       
+      // Support both raw Response and { response, accountName } object
+      const response = result instanceof Response ? result : result?.response;
+      const accountName = result?.accountName || null;
+
       // Success (2xx) - return response
-      if (result.ok) {
+      if (response && response.ok) {
         log.info("COMBO", `Model ${modelStr} succeeded`);
-        return result;
+        comboPath.push({ model: modelStr, status: "success", latency: attemptLatency, accountName });
+        
+        // Attach comboPath to response if possible for logging
+        if (result instanceof Response) return result;
+        return response;
       }
 
       // Extract error info from response
-      let errorText = result.statusText || "";
+      let errorText = response?.statusText || "";
       let retryAfter = null;
-      try {
-        const errorBody = await result.clone().json();
-        errorText = errorBody?.error?.message || errorBody?.error || errorBody?.message || errorText;
-        retryAfter = errorBody?.retryAfter || null;
-      } catch {
-        // Ignore JSON parse errors
+      if (response) {
+        try {
+          const errorBody = await response.clone().json();
+          errorText = errorBody?.error?.message || errorBody?.error || errorBody?.message || errorText;
+          retryAfter = errorBody?.retryAfter || null;
+        } catch {
+          // Ignore JSON parse errors
+        }
       }
+      const statusCode = response?.status || 500;
+
+      comboPath.push({ model: modelStr, status: "failed", latency: attemptLatency, error: errorText, statusCode, accountName });
 
       // Track earliest retryAfter across all combo models
       if (retryAfter && (!earliestRetryAfter || new Date(retryAfter) < new Date(earliestRetryAfter))) {
@@ -148,51 +164,45 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
       }
 
       // Check if should fallback to next model
-      const { shouldFallback, cooldownMs } = checkFallbackError(result.status, errorText);
+      const { shouldFallback, cooldownMs } = checkFallbackError(statusCode, errorText);
 
       if (!shouldFallback) {
-        log.warn("COMBO", `Model ${modelStr} failed (no fallback)`, { status: result.status });
-        return result;
+        log.warn("COMBO", `Model ${modelStr} failed (no fallback)`, { status: statusCode });
+        const finalErrorResponse = new Response(JSON.stringify({ error: { message: errorText, type: "combo_error", comboPath } }), { status: statusCode, headers: { "Content-Type": "application/json" } });
+        return finalErrorResponse;
       }
 
       // For transient errors (503/502/504), wait for cooldown before falling through
       // so a briefly-overloaded provider gets a chance to recover rather than being
       // skipped immediately (fixes: combo falls through on transient 503)
       if (cooldownMs && cooldownMs > 0 && cooldownMs <= 5000 &&
-          (result.status === 503 || result.status === 502 || result.status === 504)) {
-        log.info("COMBO", `Model ${modelStr} transient ${result.status}, waiting ${cooldownMs}ms before next`);
+          (statusCode === 503 || statusCode === 502 || statusCode === 504)) {
+        log.info("COMBO", `Model ${modelStr} transient ${statusCode}, waiting ${cooldownMs}ms before next`);
         await new Promise(r => setTimeout(r, cooldownMs));
       }
 
       // Fallback to next model
-      lastError = errorText || String(result.status);
-      if (!lastStatus) lastStatus = result.status;
-      log.warn("COMBO", `Model ${modelStr} failed, trying next`, { status: result.status });
-    } catch (error) {
-      // Catch unexpected exceptions to ensure fallback continues
-      lastError = error.message || String(error);
-      if (!lastStatus) lastStatus = 500;
-      log.warn("COMBO", `Model ${modelStr} threw error, trying next`, { error: lastError });
+      lastError = errorText || String(statusCode);
+      if (!lastStatus) lastStatus = statusCode;
+      log.warn("COMBO", `Model ${modelStr} failed, trying next`, { status: statusCode });
+    } catch (e) {
+      const attemptLatency = Date.now() - attemptStartTime;
+      const errorText = e.message || "Unknown combo error";
+      comboPath.push({ model: modelStr, status: "failed", latency: attemptLatency, error: errorText, statusCode: 500 });
+      log.error("COMBO", `Model ${modelStr} threw an error: ${errorText}. Retrying...`);
+      lastError = errorText;
+      lastStatus = 500;
+      continue; 
     }
   }
 
   // All models failed
-  // Use 503 (Service Unavailable) rather than 406 (Not Acceptable) — 406 implies
-  // the request itself is invalid, but here the providers are simply unavailable
-  // or have no active credentials. 503 is more accurate and retryable by clients.
-  const allDisabled = lastError && lastError.toLowerCase().includes("no credentials");
-  const status = allDisabled ? 503 : (lastStatus || 503);
-  const msg = lastError || "All combo models unavailable";
+  const finalErrorMessage = lastError || "All combo models unavailable";
+  const finalStatusCode = lastStatus || 500;
 
+  const errorResponse = new Response(JSON.stringify({ error: { message: finalErrorMessage, type: "combo_error", comboPath } }), { status: finalStatusCode, headers: { "Content-Type": "application/json" } });
   if (earliestRetryAfter) {
-    const retryHuman = formatRetryAfter(earliestRetryAfter);
-    log.warn("COMBO", `All models failed | ${msg} (${retryHuman})`);
-    return unavailableResponse(status, msg, earliestRetryAfter, retryHuman);
+    errorResponse.headers.set("Retry-After", new Date(earliestRetryAfter).toUTCString());
   }
-
-  log.warn("COMBO", `All models failed | ${msg}`);
-  return new Response(
-    JSON.stringify({ error: { message: msg } }),
-    { status, headers: { "Content-Type": "application/json" } }
-  );
+  return errorResponse;
 }

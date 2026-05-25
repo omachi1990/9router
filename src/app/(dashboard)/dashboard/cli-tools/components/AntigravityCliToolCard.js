@@ -1,34 +1,16 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Card, Button, ModelSelectModal, ManualConfigModal } from "@/shared/components";
-import Image from "next/image";
 import BaseUrlSelect from "./BaseUrlSelect";
 import ApiKeySelect from "./ApiKeySelect";
 import TestModelButton from "./TestModelButton";
 import { matchKnownEndpoint } from "./cliEndpointMatch";
 
-const ENDPOINT = "/api/cli-tools/hermes-settings";
-
-export default function HermesToolCard({
-  tool,
-  isExpanded,
-  onToggle,
-  baseUrl,
-  hasActiveProviders,
-  apiKeys,
-  activeProviders,
-  cloudEnabled,
-  initialStatus,
-  tunnelEnabled,
-  tunnelPublicUrl,
-  tailscaleEnabled,
-  tailscaleUrl,
-}) {
-  const [hermesStatus, setHermesStatus] = useState(initialStatus || null);
+export default function AntigravityCliToolCard({ tool, isExpanded, onToggle, baseUrl, apiKeys, activeProviders, cloudEnabled, initialStatus, tunnelEnabled, tunnelPublicUrl, tailscaleEnabled, tailscaleUrl }) {
+  const [status, setStatus] = useState(initialStatus || null);
   const [checking, setChecking] = useState(false);
   const [applying, setApplying] = useState(false);
-  const [restoring, setRestoring] = useState(false);
   const [message, setMessage] = useState(null);
   const [selectedApiKey, setSelectedApiKey] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
@@ -36,17 +18,6 @@ export default function HermesToolCard({
   const [modelAliases, setModelAliases] = useState({});
   const [showManualConfigModal, setShowManualConfigModal] = useState(false);
   const [customBaseUrl, setCustomBaseUrl] = useState("");
-  const hasInitializedModel = useRef(false);
-
-  const getConfigStatus = () => {
-    if (!hermesStatus?.installed) return null;
-    const cfg = hermesStatus.settings?.model;
-    if (!cfg?.base_url) return "not_configured";
-    if (matchKnownEndpoint(cfg.base_url, { tunnelPublicUrl, tailscaleUrl })) return "configured";
-    return "other";
-  };
-
-  const configStatus = getConfigStatus();
 
   useEffect(() => {
     if (apiKeys?.length > 0 && !selectedApiKey) {
@@ -55,11 +26,11 @@ export default function HermesToolCard({
   }, [apiKeys, selectedApiKey]);
 
   useEffect(() => {
-    if (initialStatus) setHermesStatus(initialStatus);
+    if (initialStatus) setStatus(initialStatus);
   }, [initialStatus]);
 
   useEffect(() => {
-    if (isExpanded && !hermesStatus) {
+    if (isExpanded && !status) {
       checkStatus();
       fetchModelAliases();
     }
@@ -77,49 +48,51 @@ export default function HermesToolCard({
   };
 
   useEffect(() => {
-    if (hermesStatus?.installed && !hasInitializedModel.current) {
-      hasInitializedModel.current = true;
-      const cfg = hermesStatus.settings?.model;
-      if (cfg?.default) setSelectedModel(cfg.default);
+    if (status?.config) {
+      const modelMatch = status.config.match(/^ANTIGRAVITY_MODEL="([^"]+)"/m);
+      if (modelMatch) setSelectedModel(modelMatch[1]);
     }
-  }, [hermesStatus]);
+  }, [status]);
+
+  const getConfigStatus = () => {
+    if (!status?.installed) return null;
+    if (!status.config) return "not_configured";
+    const parsed = status.config.match(/ANTIGRAVITY_BASE_URL="([^"]+)"/);
+    const currentUrl = parsed ? parsed[1] : "";
+    return matchKnownEndpoint(currentUrl, { tunnelPublicUrl, tailscaleUrl }) ? "configured" : "other";
+  };
+
+  const configStatus = getConfigStatus();
+
+  const getEffectiveBaseUrl = () => {
+    const url = customBaseUrl || baseUrl;
+    return url;
+  };
+
+  const getDisplayUrl = () => customBaseUrl || baseUrl;
 
   const checkStatus = async () => {
     setChecking(true);
     try {
-      const res = await fetch(ENDPOINT);
+      const res = await fetch("/api/cli-tools/antigravity-settings");
       const data = await res.json();
-      setHermesStatus(data);
+      setStatus(data);
     } catch (error) {
-      setHermesStatus({ installed: false, error: error.message });
+      setStatus({ installed: false, error: error.message });
     } finally {
       setChecking(false);
     }
   };
 
-  const normalizeLocalhost = (url) => url.replace("://localhost", "://127.0.0.1");
-
-  const getLocalBaseUrl = () => {
-    if (typeof window !== "undefined") {
-      return normalizeLocalhost(window.location.origin);
-    }
-    return "http://127.0.0.1:20128";
-  };
-
-  const getEffectiveBaseUrl = () => {
-    const url = customBaseUrl || getLocalBaseUrl();
-    return url.endsWith("/v1") ? url : `${url}/v1`;
-  };
-
-  const handleApply = async () => {
+  const handleApplySettings = async () => {
     setApplying(true);
     setMessage(null);
     try {
-      const keyToUse = selectedApiKey?.trim()
-        || (apiKeys?.length > 0 ? apiKeys[0].key : null)
-        || (!cloudEnabled ? "sk_9router" : null);
+      const keyToUse = (selectedApiKey && selectedApiKey.trim())
+        ? selectedApiKey
+        : (!cloudEnabled ? "sk_9router" : selectedApiKey);
 
-      const res = await fetch(ENDPOINT, {
+      const res = await fetch("/api/cli-tools/antigravity-settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -142,26 +115,6 @@ export default function HermesToolCard({
     }
   };
 
-  const handleReset = async () => {
-    setRestoring(true);
-    setMessage(null);
-    try {
-      const res = await fetch(ENDPOINT, { method: "DELETE" });
-      const data = await res.json();
-      if (res.ok) {
-        setMessage({ type: "success", text: "Settings reset successfully!" });
-        setSelectedModel("");
-        checkStatus();
-      } else {
-        setMessage({ type: "error", text: data.error || "Failed to reset settings" });
-      }
-    } catch (error) {
-      setMessage({ type: "error", text: error.message });
-    } finally {
-      setRestoring(false);
-    }
-  };
-
   const handleModelSelect = (model) => {
     setSelectedModel(model.value);
     setModalOpen(false);
@@ -172,12 +125,13 @@ export default function HermesToolCard({
       ? selectedApiKey
       : (!cloudEnabled ? "sk_9router" : "<API_KEY_FROM_DASHBOARD>");
 
-    const yamlContent = `model:\n  default: "${selectedModel || "provider/model-id"}"\n  provider: "custom"\n  base_url: "${getEffectiveBaseUrl()}"\n`;
-    const envContent = `OPENAI_API_KEY=${keyToUse}\n`;
+    const envContent = `export ANTIGRAVITY_API_KEY="${keyToUse}"\nexport ANTIGRAVITY_BASE_URL="${getEffectiveBaseUrl()}"\nexport ANTIGRAVITY_MODEL="${selectedModel}"`;
 
     return [
-      { filename: "~/.hermes/config.yaml", content: yamlContent },
-      { filename: "~/.hermes/.env", content: envContent },
+      {
+        filename: "Terminal / .bashrc",
+        content: envContent,
+      },
     ];
   };
 
@@ -185,8 +139,8 @@ export default function HermesToolCard({
     <Card padding="xs" className="overflow-hidden">
       <div className="flex items-start justify-between gap-3 hover:cursor-pointer sm:items-center" onClick={onToggle}>
         <div className="flex min-w-0 items-center gap-3">
-          <div className="size-8 flex items-center justify-center shrink-0">
-            <Image src="/providers/hermes.png" alt={tool.name} width={32} height={32} className="size-8 object-contain rounded-lg" sizes="32px" onError={(e) => { e.target.style.display = "none"; }} />
+          <div className="size-8 flex items-center justify-center shrink-0 text-2xl" style={{ color: tool.color }}>
+            <span className="material-symbols-outlined">{tool.icon}</span>
           </div>
           <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -206,71 +160,60 @@ export default function HermesToolCard({
           {checking && (
             <div className="flex items-center gap-2 text-text-muted">
               <span className="material-symbols-outlined animate-spin">progress_activity</span>
-              <span>Checking Hermes Agent...</span>
+              <span>Checking Antigravity CLI...</span>
             </div>
           )}
 
-          {!checking && hermesStatus && !hermesStatus.installed && (
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-3 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <span className="material-symbols-outlined text-yellow-500">warning</span>
-                  <div className="flex-1">
-                    <p className="font-medium text-yellow-600 dark:text-yellow-400">Hermes Agent not detected locally</p>
-                    <p className="text-sm text-text-muted">Install: curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash</p>
-                  </div>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 pl-0 sm:pl-9">
-                  <Button variant="secondary" size="sm" onClick={() => setShowManualConfigModal(true)} className="w-full sm:w-auto !bg-yellow-500/20 !border-yellow-500/40 !text-yellow-700 dark:!text-yellow-300 hover:!bg-yellow-500/30">
-                    <span className="material-symbols-outlined text-[18px] mr-1">content_copy</span>
-                    Manual Config
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {!checking && hermesStatus?.installed && (
+          {!checking && status?.installed && (
             <>
               <div className="flex flex-col gap-2">
+                {/* Endpoint (selector) */}
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[8rem_auto_1fr] sm:items-center sm:gap-2">
                   <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">Select Endpoint</span>
                   <span className="material-symbols-outlined hidden text-text-muted text-[14px] sm:inline">arrow_forward</span>
                   <BaseUrlSelect
-                    value={customBaseUrl || getEffectiveBaseUrl()}
+                    value={customBaseUrl || getDisplayUrl()}
                     onChange={setCustomBaseUrl}
                     requiresExternalUrl={tool.requiresExternalUrl}
                     tunnelEnabled={tunnelEnabled}
                     tunnelPublicUrl={tunnelPublicUrl}
                     tailscaleEnabled={tailscaleEnabled}
                     tailscaleUrl={tailscaleUrl}
+                    withV1={false}
                   />
                 </div>
 
-                {hermesStatus?.settings?.model?.base_url && (
-                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[8rem_auto_1fr_auto] sm:items-center sm:gap-2">
-                    <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">Current</span>
-                    <span className="material-symbols-outlined hidden text-text-muted text-[14px] sm:inline">arrow_forward</span>
-                    <span className="min-w-0 truncate rounded bg-surface/40 px-2 py-2 text-xs text-text-muted sm:py-1.5">
-                      {hermesStatus.settings.model.base_url}
-                    </span>
-                  </div>
-                )}
+                {/* Current configured */}
+                {status?.config && (() => {
+                  const parsed = status.config.match(/ANTIGRAVITY_BASE_URL="([^"]+)"/);
+                  const currentBaseUrl = parsed ? parsed[1] : null;
+                  return currentBaseUrl ? (
+                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[8rem_auto_1fr_auto] sm:items-center sm:gap-2">
+                      <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">Current</span>
+                      <span className="material-symbols-outlined hidden text-text-muted text-[14px] sm:inline">arrow_forward</span>
+                      <span className="min-w-0 truncate rounded bg-surface/40 px-2 py-2 text-xs text-text-muted sm:py-1.5">
+                        {currentBaseUrl}
+                      </span>
+                    </div>
+                  ) : null;
+                })()}
 
+                {/* API Key */}
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[8rem_auto_1fr_auto] sm:items-center sm:gap-2">
                   <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">API Key</span>
                   <span className="material-symbols-outlined hidden text-text-muted text-[14px] sm:inline">arrow_forward</span>
                   <ApiKeySelect value={selectedApiKey} onChange={setSelectedApiKey} apiKeys={apiKeys} cloudEnabled={cloudEnabled} />
                 </div>
 
+                {/* Model */}
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[8rem_auto_1fr_auto] sm:items-center sm:gap-2">
-                  <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">Default Model</span>
+                  <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">Model</span>
                   <span className="material-symbols-outlined hidden text-text-muted text-[14px] sm:inline">arrow_forward</span>
                   <div className="relative w-full min-w-0">
                     <input type="text" value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} placeholder="provider/model-id" className="w-full min-w-0 pl-2 pr-7 py-2 bg-surface rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5" />
                     {selectedModel && <button onClick={() => setSelectedModel("")} className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-red-500 rounded transition-colors" title="Clear"><span className="material-symbols-outlined text-[14px]">close</span></button>}
                   </div>
-                  <button onClick={() => setModalOpen(true)} disabled={!hasActiveProviders} className={`w-full sm:w-auto rounded border px-2 py-2 text-xs transition-colors sm:py-1.5 whitespace-nowrap sm:shrink-0 ${hasActiveProviders ? "bg-surface border-border text-text-main hover:border-primary cursor-pointer" : "opacity-50 cursor-not-allowed border-border"}`}>Select</button>
+                  <button onClick={() => setModalOpen(true)} disabled={!activeProviders?.length} className={`w-full sm:w-auto rounded border px-2 py-2 text-xs transition-colors sm:py-1.5 whitespace-nowrap sm:shrink-0 ${activeProviders?.length ? "bg-surface border-border text-text-main hover:border-primary cursor-pointer" : "opacity-50 cursor-not-allowed border-border"}`}>Select Model</button>
                 </div>
               </div>
 
@@ -281,15 +224,12 @@ export default function HermesToolCard({
                 </div>
               )}
 
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                <Button variant="primary" size="sm" onClick={handleApply} disabled={!selectedModel} loading={applying} className="w-full sm:w-auto">
+              <div className="grid grid-cols-1 gap-2 sm:flex sm:items-start">
+                <Button variant="primary" size="sm" onClick={handleApplySettings} disabled={(!selectedApiKey && (cloudEnabled && apiKeys.length > 0)) || !selectedModel} loading={applying}>
                   <span className="material-symbols-outlined text-[14px] mr-1">save</span>Apply
                 </Button>
-                <Button variant="outline" size="sm" onClick={handleReset} disabled={!hermesStatus?.has9Router} loading={restoring} className="w-full sm:w-auto">
-                  <span className="material-symbols-outlined text-[14px] mr-1">restore</span>Reset
-                </Button>
                 <TestModelButton model={selectedModel} />
-                <Button variant="ghost" size="sm" onClick={() => setShowManualConfigModal(true)} className="w-full sm:w-auto">
+                <Button variant="ghost" size="sm" onClick={() => setShowManualConfigModal(true)}>
                   <span className="material-symbols-outlined text-[14px] mr-1">content_copy</span>Manual Config
                 </Button>
               </div>
@@ -305,13 +245,13 @@ export default function HermesToolCard({
         selectedModel={selectedModel}
         activeProviders={activeProviders}
         modelAliases={modelAliases}
-        title="Select Model for Hermes Agent"
+        title="Select Model for Antigravity CLI"
       />
 
       <ManualConfigModal
         isOpen={showManualConfigModal}
         onClose={() => setShowManualConfigModal(false)}
-        title="Hermes Agent - Manual Configuration"
+        title="Antigravity CLI - Manual Configuration"
         configs={getManualConfigs()}
       />
     </Card>

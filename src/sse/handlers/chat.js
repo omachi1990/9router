@@ -96,13 +96,21 @@ export async function handleChat(request, clientRawRequest = null) {
     const comboStrategies = settings.comboStrategies || {};
     const comboSpecificStrategy = comboStrategies[modelStr]?.fallbackStrategy;
     const comboStrategy = comboSpecificStrategy || settings.comboStrategy || "fallback";
-    
+
     const comboStickyLimit = settings.comboStickyRoundRobinLimit;
     log.info("CHAT", `Combo "${modelStr}" with ${comboModels.length} models (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
-    return handleComboChat({
+
+    // handleComboChat returns a Response object
+    return await handleComboChat({
       body,
       models: comboModels,
-      handleSingleModel: (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey),
+      handleSingleModel: async (b, m) => {
+        const result = await handleSingleModelChat(b, m, clientRawRequest, request, apiKey);
+        return {
+          response: result.response || result,
+          accountName: result.accountName
+        };
+      },
       log,
       comboName: modelStr,
       comboStrategy,
@@ -111,13 +119,14 @@ export async function handleChat(request, clientRawRequest = null) {
   }
 
   // Single model request
-  return handleSingleModelChat(body, modelStr, clientRawRequest, request, apiKey);
-}
+  const result = await handleSingleModelChat(body, modelStr, clientRawRequest, request, apiKey);
+  return result.response || result;
+  }
 
-/**
- * Handle single model chat request
- */
-async function handleSingleModelChat(body, modelStr, clientRawRequest = null, request = null, apiKey = null) {
+  /**
+  * Handle single model chat request
+  */
+  async function handleSingleModelChat(body, modelStr, clientRawRequest = null, request = null, apiKey = null, comboPath = []) {
   const modelInfo = await getModelInfo(modelStr);
 
   // If provider is null, this might be a combo name - check and handle
@@ -129,18 +138,28 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       const comboStrategies = chatSettings.comboStrategies || {};
       const comboSpecificStrategy = comboStrategies[modelStr]?.fallbackStrategy;
       const comboStrategy = comboSpecificStrategy || chatSettings.comboStrategy || "fallback";
-      
+
       const comboStickyLimit = chatSettings.comboStickyRoundRobinLimit;
       log.info("CHAT", `Combo "${modelStr}" with ${comboModels.length} models (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
-      return handleComboChat({
+
+      // handleComboChat returns a Response object
+      const result = await handleComboChat({
         body,
         models: comboModels,
-        handleSingleModel: (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey),
+        handleSingleModel: async (b, m) => {
+          const res = await handleSingleModelChat(b, m, clientRawRequest, request, apiKey, comboPath);
+          return {
+            response: res.response || res,
+            accountName: res.accountName
+          };
+        },
         log,
         comboName: modelStr,
         comboStrategy,
         comboStickyLimit
       });
+      // Propagate comboPath from handleComboChat
+      return { response: result, comboPath: result.comboPath || comboPath };
     }
     log.warn("CHAT", "Invalid model format", { model: modelStr });
     return errorResponse(HTTP_STATUS.BAD_REQUEST, "Invalid model format");
@@ -172,14 +191,15 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
         const errorMsg = lastError || credentials.lastError || "Unavailable";
         const status = lastStatus || Number(credentials.lastErrorCode) || HTTP_STATUS.SERVICE_UNAVAILABLE;
         log.warn("CHAT", `[${provider}/${model}] ${errorMsg} (${credentials.retryAfterHuman})`);
-        return unavailableResponse(status, `[${provider}/${model}] ${errorMsg}`, credentials.retryAfter, credentials.retryAfterHuman);
+        const response = unavailableResponse(status, `[${provider}/${model}] ${errorMsg}`, credentials.retryAfter, credentials.retryAfterHuman);
+        return { response, comboPath };
       }
       if (excludeConnectionIds.size === 0) {
         log.warn("AUTH", `No active credentials for provider: ${provider}`);
-        return errorResponse(HTTP_STATUS.NOT_FOUND, `No active credentials for provider: ${provider}`);
+        return { response: errorResponse(HTTP_STATUS.NOT_FOUND, `No active credentials for provider: ${provider}`), comboPath };
       }
       log.warn("CHAT", "No more accounts available", { provider });
-      return errorResponse(lastStatus || HTTP_STATUS.SERVICE_UNAVAILABLE, lastError || "All accounts unavailable");
+      return { response: errorResponse(lastStatus || HTTP_STATUS.SERVICE_UNAVAILABLE, lastError || "All accounts unavailable"), comboPath };
     }
 
     // Log account selection
@@ -214,6 +234,8 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       cavemanEnabled: !!chatSettings.cavemanEnabled,
       cavemanLevel: chatSettings.cavemanLevel || "full",
       providerThinking,
+      // Pass comboPath here
+      comboPath,
       // Detect source format by endpoint + body
       sourceFormatOverride: request?.url ? detectFormatByEndpoint(new URL(request.url).pathname, body) : null,
       onCredentialsRefreshed: async (newCreds) => {
@@ -229,7 +251,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       }
     });
 
-    if (result.success) return result.response;
+    if (result.success) return { response: result.response, accountName: credentials.connectionName };
 
     // Mark account unavailable (auto-calculates cooldown with exponential backoff, or precise resetsAtMs)
     const { shouldFallback } = await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model, result.resetsAtMs);
@@ -242,6 +264,6 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       continue;
     }
 
-    return result.response;
+    return { response: result.response, accountName: credentials.connectionName };
   }
 }

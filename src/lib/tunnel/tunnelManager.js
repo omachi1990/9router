@@ -1,5 +1,6 @@
+import crypto from "crypto";
 import { loadState, saveState, generateShortId, clearPid } from "./state.js";
-import { spawnQuickTunnel, killCloudflared, isCloudflaredRunning, setUnexpectedExitHandler } from "./cloudflared.js";
+import { spawnQuickTunnel, spawnCloudflared, killCloudflared, isCloudflaredRunning, setUnexpectedExitHandler } from "./cloudflared.js";
 import { startFunnel, stopFunnel, isTailscaleRunning, isTailscaleRunningStrict, isTailscaleLoggedIn, startLogin, startDaemonWithPassword, provisionCert } from "./tailscale.js";
 import { getSettings, updateSettings } from "@/lib/localDb";
 import { getCachedPassword, loadEncryptedPassword, initDbHooks } from "@/mitm/manager";
@@ -81,6 +82,22 @@ export async function enableTunnel(localPort = 20128) {
     const existing = loadState();
     const shortId = existing?.shortId || generateShortId();
 
+    const tunnelToken = process.env.TUNNEL_TOKEN;
+    const tunnelPublicUrl = process.env.TUNNEL_PUBLIC_URL || "private";
+    if (tunnelToken) {
+      console.log("[Tunnel] using private tunnel token");
+      await spawnCloudflared(tunnelToken);
+      saveState({ shortId: "private", machineId, tunnelUrl: tunnelPublicUrl });
+      await updateSettings({ tunnelEnabled: true, tunnelUrl: tunnelPublicUrl });
+
+      tunnelReachable.value = true;
+      tunnelReachable.url = `http://localhost:${localPort}`;
+      tunnelReachable.fetchedAt = Date.now();
+
+      console.log("[Tunnel] private tunnel enabled");
+      return { success: true, tunnelUrl: "private", shortId: "private", publicUrl: "Managed by Cloudflare" };
+    }
+
     const onUrlUpdate = async (url) => {
       if (token.cancelled) return;
       console.log(`[Tunnel] url updated: ${url}`);
@@ -149,7 +166,12 @@ export async function getTunnelStatus() {
   const settingsEnabled = settings.tunnelEnabled === true;
   const state = loadState();
   const shortId = state?.shortId || "";
-  const publicUrl = shortId ? `https://r${shortId}.abc-tunnel.us` : "";
+  
+  let publicUrl = process.env.TUNNEL_PUBLIC_URL || "";
+  if (!publicUrl && shortId && shortId !== "private") {
+    publicUrl = `https://r${shortId}.abc-tunnel.us`;
+  }
+  
   const tunnelUrl = state?.tunnelUrl || "";
 
   // Lazy: skip PID probe entirely when user disabled tunnel

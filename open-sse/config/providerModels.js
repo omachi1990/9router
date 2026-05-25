@@ -64,8 +64,16 @@ export const PROVIDER_MODELS = {
     { id: "gpt-5.2-image", name: "GPT 5.2 Image", type: "image", capabilities: ["text2img", "edit"], params: ["size", "quality", "background", "image_detail", "output_format"] },
   ]),
   gc: [  // Gemini CLI
-    { id: "gemini-3-flash-preview", name: "Gemini 3 Flash Preview" },
+    { id: "gemini-3.1-pro-high", name: "Gemini 3.1 Pro High (Paid Tier)" },
+    { id: "gemini-3.1-pro-low", name: "Gemini 3.1 Pro Low (Free Tier)" },
+    { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro Preview" },
+    { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash Lite Preview" },
     { id: "gemini-3-pro-preview", name: "Gemini 3 Pro Preview" },
+    { id: "gemini-3-flash", name: "Gemini 3 Flash" },
+    { id: "gemini-3-flash-preview", name: "Gemini 3 Flash Preview" },
+    { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
+    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
+    { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite" },
   ],
   qw: [  // Qwen Code
     // { id: "qwen3-coder-next", name: "Qwen3 Coder Next" },
@@ -264,9 +272,13 @@ export const PROVIDER_MODELS = {
   ],
   gemini: [
     // Gemini 3.1 series
+    { id: "gemini-3.1-pro-high", name: "Gemini 3.1 Pro High (Paid Tier)" },
+    { id: "gemini-3.1-pro-low", name: "Gemini 3.1 Pro Low (Free Tier)" },
     { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro Preview" },
     { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash Lite Preview" },
     // Gemini 3 series
+    { id: "gemini-3-pro-preview", name: "Gemini 3 Pro Preview" },
+    { id: "gemini-3-flash", name: "Gemini 3 Flash" },
     { id: "gemini-3-flash-preview", name: "Gemini 3 Flash Preview" },
     // Gemini 2.5 series
     { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },

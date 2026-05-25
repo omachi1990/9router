@@ -7,79 +7,46 @@ import Drawer from "@/shared/components/Drawer";
 import Pagination from "@/shared/components/Pagination";
 import { cn } from "@/shared/utils/cn";
 import { AI_PROVIDERS, getProviderByAlias } from "@/shared/constants/providers";
+import CollapsibleSection from "./CollapsibleSection";
+import ComboPathVisualizer from "./ComboPathVisualizer";
 
-let providerNameCache = null;
-let providerNodesCache = null;
+let providerNameCacheInternal = null;
 
 async function fetchProviderNames() {
-  if (providerNameCache && providerNodesCache) {
-    return { providerNameCache, providerNodesCache };
+  if (providerNameCacheInternal) return providerNameCacheInternal;
+
+  try {
+    const nodesRes = await fetch("/api/provider-nodes");
+    const nodesData = await nodesRes.json();
+    const nodes = nodesData.nodes || [];
+    const providerNodesCache = {};
+
+    for (const node of nodes) {
+      providerNodesCache[node.id] = node.name;
+    }
+
+    providerNameCacheInternal = {
+      ...AI_PROVIDERS,
+      ...providerNodesCache
+    };
+
+    return providerNameCacheInternal;
+  } catch (error) {
+    console.error("Failed to fetch provider names:", error);
+    return AI_PROVIDERS;
   }
-
-  const nodesRes = await fetch("/api/provider-nodes");
-  const nodesData = await nodesRes.json();
-  const nodes = nodesData.nodes || [];
-  providerNodesCache = {};
-
-  for (const node of nodes) {
-    providerNodesCache[node.id] = node.name;
-  }
-
-  providerNameCache = {
-    ...AI_PROVIDERS,
-    ...providerNodesCache
-  };
-
-  return { providerNameCache, providerNodesCache };
 }
 
 function getProviderName(providerId, cache) {
   if (!providerId) return providerId;
-  if (!cache) return providerId;
+  const currentCache = cache || providerNameCacheInternal || AI_PROVIDERS;
+  const cached = currentCache[providerId];
 
-  const cached = cache[providerId];
-
-  if (typeof cached === 'string') {
-    return cached;
-  }
-
-  if (cached?.name) {
-    return cached.name;
-  }
+  if (typeof cached === 'string') return cached;
+  if (cached?.name) return cached.name;
 
   const providerConfig = getProviderByAlias(providerId) || AI_PROVIDERS[providerId];
   return providerConfig?.name || providerId;
-}
-
-function CollapsibleSection({ title, children, defaultOpen = false, icon = null }) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  
-  return (
-    <div className="border border-black/5 dark:border-white/5 rounded-lg overflow-hidden">
-      <button 
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between p-3 bg-black/[0.02] dark:bg-white/[0.02] hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          {icon && <span className="material-symbols-outlined text-[18px] text-text-muted">{icon}</span>}
-          <span className="font-semibold text-sm text-text-main">{title}</span>
-        </div>
-        <span className={cn(
-          "material-symbols-outlined text-[20px] text-text-muted transition-transform duration-200",
-          isOpen ? "rotate-90" : ""
-        )}>
-          chevron_right
-        </span>
-      </button>
-      
-      {isOpen && (
-        <div className="p-4 border-t border-black/5 dark:border-white/5">
-          {children}
-        </div>
-      )}
-    </div>
-  );
 }
 
 function getInputTokens(tokens) {
@@ -114,7 +81,7 @@ export default function RequestDetailsTab() {
       setProviders(data.providers || []);
 
       const cache = await fetchProviderNames();
-      setProviderNameCache(cache.providerNameCache);
+      setProviderNameCache(cache);
     } catch (error) {
       console.error("Failed to fetch providers:", error);
     }
@@ -247,13 +214,14 @@ export default function RequestDetailsTab() {
                 <th className="text-right p-4 text-sm font-semibold text-text-main">Input Tokens</th>
                 <th className="text-right p-4 text-sm font-semibold text-text-main">Output Tokens</th>
                 <th className="text-left p-4 text-sm font-semibold text-text-main">Latency</th>
+                <th className="text-left p-4 text-sm font-semibold text-text-main">Strategy / Path</th>
                 <th className="text-center p-4 text-sm font-semibold text-text-main">Action</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="7" className="p-8 text-center text-text-muted">
+                  <td colSpan="8" className="p-8 text-center text-text-muted">
                     <div className="flex items-center justify-center gap-2">
                       <span className="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>
                       Loading...
@@ -262,7 +230,7 @@ export default function RequestDetailsTab() {
                 </tr>
               ) : details.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="p-8 text-center text-text-muted">
+                  <td colSpan="8" className="p-8 text-center text-text-muted">
                     No request details found
                   </td>
                 </tr>
@@ -294,6 +262,9 @@ export default function RequestDetailsTab() {
                         <div>TTFT: <span className="font-mono">{detail.latency?.ttft || 0}ms</span></div>
                         <div>Total: <span className="font-mono">{detail.latency?.total || 0}ms</span></div>
                       </div>
+                    </td>
+                    <td className="p-4 text-sm text-text-main">
+                      {detail.comboPath && <ComboPathVisualizer path={detail.comboPath} />}
                     </td>
                     <td className="p-4 text-center">
                       <Button

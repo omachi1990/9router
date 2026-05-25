@@ -48,7 +48,7 @@ export default function ApiKeySelect({ value, onChange, apiKeys = [], cloudEnabl
         className="w-full min-w-0 px-2 py-2 bg-surface rounded text-xs border border-border focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5"
       >
         {apiKeys.map((k) => (
-          <option key={k.id} value={k.key}>{k.key}</option>
+          <option key={k.id} value={k.key}>{k.name ? `${k.name} (${k.key.substring(0, 15)}...)` : k.key}</option>
         ))}
         <option value={CUSTOM_VALUE}>Custom...</option>
       </select>
