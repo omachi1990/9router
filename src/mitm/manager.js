@@ -15,6 +15,7 @@ const { installCert, uninstallCert } = require("./cert/install");
 const { isCertExpired } = require("./cert/rootCA");
 const { DATA_DIR, MITM_DIR } = require("./paths");
 const { log, err } = require("./logger");
+const { LSOF_BIN } = require("./config");
 
 const DEFAULT_MITM_ROUTER_BASE = "http://localhost:20128";
 
@@ -108,7 +109,7 @@ function getProcessUsingPort443() {
         if (processMatch) return processMatch[1].replace(".exe", "");
       }
     } else {
-      const result = execSync("lsof -i :443", { encoding: "utf8", windowsHide: true });
+      const result = execSync(`${LSOF_BIN} -i :443`, { encoding: "utf8", windowsHide: true });
       const lines = result.trim().split("\n");
       if (lines.length > 1) return lines[1].split(/\s+/)[0];
     }
@@ -298,7 +299,7 @@ function getPort443Owner(sudoPassword) {
       });
     } else {
       // Only find process actually LISTENING on TCP port 443
-      exec("lsof -nP -iTCP:443 -sTCP:LISTEN -t", { windowsHide: true }, (err, stdout) => {
+      exec(`${LSOF_BIN} -nP -iTCP:443 -sTCP:LISTEN -t`, { windowsHide: true }, (err, stdout) => {
         if (err || !stdout?.trim()) return resolve(null);
         const pid = parseInt(stdout.trim().split("\n")[0], 10);
         if (!pid || isNaN(pid)) return resolve(null);
@@ -549,6 +550,15 @@ async function startServer(apiKey, sudoPassword, forceKillPort443 = false) {
   }
 
   // Step 2: Spawn server (Root CA already installed in Step 1.5)
+  // Verify server.js exists — recopy if runtime file was deleted (antivirus/cleanup)
+  let effectiveServerPath = SERVER_PATH;
+  if (!effectiveServerPath || !fs.existsSync(effectiveServerPath)) {
+    log(`[MITM] server.js missing at ${effectiveServerPath} → recopying`);
+    effectiveServerPath = ensureRuntimeServer(resolveBundledServerPath());
+    if (!effectiveServerPath || !fs.existsSync(effectiveServerPath)) {
+      throw new Error(`MITM server.js not found at ${effectiveServerPath}. Reinstall 9router.`);
+    }
+  }
   const mitmRouterBase = await resolveMitmRouterBaseUrl();
   log(`🚀 Starting server... (router: ${mitmRouterBase})`);
   if (IS_WIN) {
@@ -567,12 +577,14 @@ async function startServer(apiKey, sudoPassword, forceKillPort443 = false) {
     }
 
     // Spawn directly — process already has admin rights
+    // cwd=tmpdir so process doesn't lock the install dir on Windows (EBUSY on update)
     serverProcess = spawn(
       process.execPath,
-      [SERVER_PATH],
+      [effectiveServerPath],
       {
         detached: false,
         windowsHide: true,
+        cwd: os.tmpdir(),
         stdio: ["ignore", "pipe", "pipe"],
         env: {
           ...process.env,
@@ -593,7 +605,7 @@ async function startServer(apiKey, sudoPassword, forceKillPort443 = false) {
       `MITM_ROUTER_BASE=${shellQuoteSingle(mitmRouterBase)}`,
       "NODE_ENV=production",
       shellQuoteSingle(process.execPath),
-      shellQuoteSingle(SERVER_PATH),
+      shellQuoteSingle(effectiveServerPath),
     ].join(" ");
     serverProcess = spawn(
       "sudo", ["-S", "-E", "sh", "-c", inlineCmd],
@@ -603,9 +615,10 @@ async function startServer(apiKey, sudoPassword, forceKillPort443 = false) {
     serverProcess.stdin.end();
   } else {
     // Docker/minimal images: no sudo — same as Windows-style direct spawn
-    serverProcess = spawn(process.execPath, [SERVER_PATH], {
+    serverProcess = spawn(process.execPath, [effectiveServerPath], {
       detached: false,
       windowsHide: true,
+      cwd: os.tmpdir(),
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,

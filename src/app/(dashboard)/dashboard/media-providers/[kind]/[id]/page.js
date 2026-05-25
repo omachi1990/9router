@@ -5,13 +5,14 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { Card, Badge, Button, AddCustomEmbeddingModal, NoAuthProxyCard, ProviderInfoCard } from "@/shared/components";
 import ProviderIcon from "@/shared/components/ProviderIcon";
-import { MEDIA_PROVIDER_KINDS, AI_PROVIDERS, getProviderAlias, isCustomEmbeddingProvider } from "@/shared/constants/providers";
+import { MEDIA_PROVIDER_KINDS, AI_PROVIDERS, getProviderAlias, isCustomEmbeddingProvider, resolveProviderId } from "@/shared/constants/providers";
 import { getModelsByProviderId } from "@/shared/constants/models";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import ConnectionsCard from "@/app/(dashboard)/dashboard/providers/components/ConnectionsCard";
 import ModelsCard from "@/app/(dashboard)/dashboard/providers/components/ModelsCard";
 import { TTS_PROVIDER_CONFIG } from "@/shared/constants/ttsProviders";
 import { getTtsVoicesForModel } from "open-sse/config/ttsModels.js";
+import { GOOGLE_TTS_LANGUAGES } from "open-sse/config/googleTtsLanguages.js";
 
 // Shared row layout — defined outside components to avoid re-mount on re-render
 function Row({ label, children }) {
@@ -40,6 +41,27 @@ const DEFAULT_RESPONSE_EXAMPLE = `{
   "model": "...",
   "usage": { "prompt_tokens": 9, "total_tokens": 9 }
 }`;
+
+const CLOUDFLARE_TEST_IMAGE_URL = "https://pub-1fb693cb11cc46b2b2f656f51e015a2c.r2.dev/dog.png";
+const CLOUDFLARE_TEST_MASK_URL = "https://pub-1fb693cb11cc46b2b2f656f51e015a2c.r2.dev/dog-mask.png";
+
+function getImageEditDefaults(providerId, modelId) {
+  if (providerId !== "cloudflare-ai") return {};
+  if (modelId === "@cf/runwayml/stable-diffusion-v1-5-img2img") {
+    return { image: CLOUDFLARE_TEST_IMAGE_URL };
+  }
+  if (modelId === "@cf/runwayml/stable-diffusion-v1-5-inpainting") {
+    return { image: CLOUDFLARE_TEST_IMAGE_URL, mask_image: CLOUDFLARE_TEST_MASK_URL };
+  }
+  return {};
+}
+
+function toImagePreviewSrc(value) {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  if (!trimmed) return "";
+  if (/^(data:image\/|https?:\/\/)/i.test(trimmed)) return trimmed;
+  return `data:image/png;base64,${trimmed}`;
+}
 
 // Config-driven example defaults per kind
 const KIND_EXAMPLE_CONFIG = {
@@ -91,13 +113,6 @@ const KIND_EXAMPLE_CONFIG = {
     bodyKey: "url",
     extraBody: { prompt: "Describe this image in detail" },
     defaultResponse: `{\n  "text": "A cat sitting on a windowsill...",\n  "model": "..."\n}`,
-  },
-  stt: {
-    inputLabel: "Audio URL",
-    inputPlaceholder: "https://example.com/audio.mp3",
-    defaultInput: "",
-    bodyKey: "url",
-    defaultResponse: `{\n  "text": "Hello world...",\n  "model": "..."\n}`,
   },
   video: {
     inputLabel: "Prompt",
@@ -357,9 +372,9 @@ function TtsExampleCard({ providerId }) {
   const config = TTS_PROVIDER_CONFIG[providerId] || TTS_PROVIDER_CONFIG["edge-tts"];
 
   // Voice state
-  const [selectedVoice, setSelectedVoice]     = useState("");
+  const [selectedVoice, setSelectedVoice]     = useState(config.defaultVoiceId || "");
   const [selectedVoiceName, setSelectedVoiceName] = useState("");
-  const [voiceId, setVoiceId]               = useState(""); // editable voice id (elevenlabs)
+  const [voiceId, setVoiceId]               = useState(config.defaultVoiceId || ""); // editable voice id (elevenlabs/config providers)
   // Voices shown below Voice row after language selected
   const [countryVoices, setCountryVoices]     = useState([]);
   const [selectedLang, setSelectedLang]       = useState("");
@@ -394,6 +409,8 @@ function TtsExampleCard({ providerId }) {
   const [modalSearch, setModalSearch]       = useState("");
   const [modalError, setModalError]         = useState("");
   const [byLang, setByLang]                 = useState({});
+  // Language hint (e.g. Gemini): controls the spoken language without affecting voice selection
+  const [languageHint, setLanguageHint]     = useState("");
 
   useEffect(() => {
     setLocalEndpoint(window.location.origin);
@@ -514,10 +531,15 @@ function TtsExampleCard({ providerId }) {
     return "";
   })();
 
+  const ttsBody = (() => {
+    const b = { model: modelFull, input };
+    if (config.hasLanguageHint && languageHint) b.language = languageHint;
+    return b;
+  })();
   const curlSnippet = `curl -X POST ${endpoint}/v1/audio/speech${responseFormat === "json" ? "?response_format=json" : ""} \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer ${apiKey || "YOUR_KEY"}" \\
-  -d '{"model": "${modelFull}", "input": "${input}"}' \\
+  -d '${JSON.stringify(ttsBody)}' \\
   ${responseFormat === "json" ? "" : "--output speech.mp3"}`;
 
   const handleRun = async () => {
@@ -534,7 +556,7 @@ function TtsExampleCard({ providerId }) {
       const res = await fetch(url, {
         method: "POST",
         headers,
-        body: JSON.stringify({ model: modelFull, input: input.trim() }),
+        body: JSON.stringify({ ...ttsBody, input: input.trim() }),
       });
       setLatency(Date.now() - start);
       if (!res.ok) {
@@ -603,6 +625,22 @@ function TtsExampleCard({ providerId }) {
                   ? AI_PROVIDERS[providerId].ttsConfig.models
                   : getModelsByProviderId(config.modelKey)) || []).map((m) => (
                   <option key={m.id} value={m.id}>{m.name || m.id}</option>
+                ))}
+              </select>
+            </Row>
+          )}
+
+          {/* Language hint dropdown (Gemini) — sends body.language to guide pronunciation */}
+          {config.hasLanguageHint && (
+            <Row label="Language">
+              <select
+                value={languageHint}
+                onChange={(e) => setLanguageHint(e.target.value)}
+                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+              >
+                <option value="">Auto-detect</option>
+                {GOOGLE_TTS_LANGUAGES.map((l) => (
+                  <option key={l.id} value={l.name}>{l.name}</option>
                 ))}
               </select>
             </Row>
@@ -879,6 +917,8 @@ function TtsExampleCard({ providerId }) {
 // Generic Example Card — config-driven for webSearch, webFetch, image, imageToText, stt, video, music
 function GenericExampleCard({ providerId, kind }) {
   const providerAlias = getProviderAlias(providerId);
+  const resolvedId = resolveProviderId(providerAlias);
+  const safeProviderAlias = resolvedId === providerId ? providerAlias : providerId;
   const kindConfig = MEDIA_PROVIDER_KINDS.find((k) => k.id === kind);
   const exConfig = KIND_EXAMPLE_CONFIG[kind];
   const safeExConfig = exConfig || {};
@@ -886,15 +926,17 @@ function GenericExampleCard({ providerId, kind }) {
   // Get models for this kind (e.g., type="image")
   const kindModels = getModelsByProviderId(providerId).filter((m) => m.type === kind);
   // Kinds that need a model identifier in the request (image/video/music)
-  const KIND_NEEDS_MODEL = new Set(["image", "video", "music", "stt", "imageToText"]);
+  const KIND_NEEDS_MODEL = new Set(["image", "video", "music", "imageToText"]);
   const needsModel = KIND_NEEDS_MODEL.has(kind);
   const allowManualModel = needsModel && kindModels.length === 0;
   const [selectedModel, setSelectedModel] = useState(kindModels[0]?.id ?? "");
   const selectedModelObj = kindModels.find((m) => m.id === selectedModel);
   const supportsEdit = !!selectedModelObj?.capabilities?.includes("edit");
+  const supportsMask = !!selectedModelObj?.capabilities?.includes("mask");
 
   const [input, setInput] = useState(safeExConfig.defaultInput || "");
   const [refImage, setRefImage] = useState("");
+  const [maskImage, setMaskImage] = useState("");
   const [extraValues, setExtraValues] = useState(() =>
     (safeExConfig.extraFields || []).reduce((acc, f) => { acc[f.key] = f.default ?? ""; return acc; }, {})
   );
@@ -939,10 +981,15 @@ function GenericExampleCard({ providerId, kind }) {
 
   const endpoint = useTunnel ? tunnelEndpoint : localEndpoint;
   const apiPath = kindConfig.endpoint.path;
-  // webSearch/webFetch: use providerAlias only. Other kinds: append model when present.
+  // webSearch/webFetch: use safeProviderAlias only. Other kinds: append model when present.
   const modelFull = !needsModel
-    ? providerAlias
-    : (selectedModel ? `${providerAlias}/${selectedModel}` : (allowManualModel ? "" : providerAlias));
+    ? safeProviderAlias
+    : (selectedModel ? `${safeProviderAlias}/${selectedModel}` : (allowManualModel ? "" : safeProviderAlias));
+  const imageEditDefaults = getImageEditDefaults(providerId, selectedModel);
+  const effectiveRefImage = refImage.trim() || imageEditDefaults.image || "";
+  const effectiveMaskImage = maskImage.trim() || imageEditDefaults.mask_image || "";
+  const refImagePreviewSrc = toImagePreviewSrc(effectiveRefImage);
+  const maskImagePreviewSrc = toImagePreviewSrc(effectiveMaskImage);
 
   // Build request body with optional extra fields (only non-empty values)
   const extraBodyFromFields = Object.entries(extraValues).reduce((acc, [k, v]) => {
@@ -956,7 +1003,8 @@ function GenericExampleCard({ providerId, kind }) {
     [exConfig.bodyKey]: input,
     ...exConfig.extraBody,
     ...extraBodyFromFields,
-    ...(supportsEdit && refImage.trim() ? { image: refImage.trim() } : {}),
+    ...(supportsEdit && effectiveRefImage ? { image: effectiveRefImage } : {}),
+    ...(supportsMask && effectiveMaskImage ? { mask_image: effectiveMaskImage } : {}),
   };
 
   // Streaming supported for codex image (Plus/Pro accounts) — disabled when binary output requested
@@ -1169,7 +1217,7 @@ function GenericExampleCard({ providerId, kind }) {
                 <input
                   value={refImage}
                   onChange={(e) => setRefImage(e.target.value)}
-                  placeholder="https://example.com/source.png"
+                  placeholder={imageEditDefaults.image || "https://example.com/source.png"}
                   className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
                 />
                 {refImage && (
@@ -1182,10 +1230,43 @@ function GenericExampleCard({ providerId, kind }) {
                   </button>
                 )}
               </div>
-              {refImage.trim() && (
+              {refImagePreviewSrc && (
                 <img
-                  src={refImage.trim()}
+                  src={refImagePreviewSrc}
                   alt="Reference"
+                  className="max-h-40 rounded-lg border border-border object-contain bg-sidebar"
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                  onLoad={(e) => { e.currentTarget.style.display = "block"; }}
+                />
+              )}
+            </div>
+          </Row>
+        )}
+
+        {supportsMask && (
+          <Row label="Mask (URL)">
+            <div className="flex flex-col gap-2">
+              <div className="relative">
+                <input
+                  value={maskImage}
+                  onChange={(e) => setMaskImage(e.target.value)}
+                  placeholder={imageEditDefaults.mask_image || "https://example.com/mask.png"}
+                  className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+                />
+                {maskImage && (
+                  <button
+                    type="button"
+                    onClick={() => setMaskImage("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">close</span>
+                  </button>
+                )}
+              </div>
+              {maskImagePreviewSrc && (
+                <img
+                  src={maskImagePreviewSrc}
+                  alt="Mask"
                   className="max-h-40 rounded-lg border border-border object-contain bg-sidebar"
                   onError={(e) => { e.currentTarget.style.display = "none"; }}
                   onLoad={(e) => { e.currentTarget.style.display = "block"; }}
@@ -1338,6 +1419,288 @@ function GenericExampleCard({ providerId, kind }) {
               />
             </div>
           )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ─── STT Example Card ────────────────────────────────────────────────────────
+function SttExampleCard({ providerId }) {
+  const providerAlias = getProviderAlias(providerId);
+  const builtinSttModels = getModelsByProviderId(providerId).filter((m) => m.type === "stt");
+  const [customSttModels, setCustomSttModels] = useState([]);
+  const sttModels = [...builtinSttModels, ...customSttModels];
+
+  const [selectedModel, setSelectedModel] = useState(builtinSttModels[0]?.id ?? "");
+  const selectedModelObj = sttModels.find((m) => m.id === selectedModel);
+  const allowedParams = Array.isArray(selectedModelObj?.params) ? selectedModelObj.params : [];
+
+  const [audioFile, setAudioFile] = useState(null);
+  const [language, setLanguage] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [responseFormat, setResponseFormat] = useState("json");
+  const [temperature, setTemperature] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [useTunnel, setUseTunnel] = useState(false);
+  const [localEndpoint, setLocalEndpoint] = useState("");
+  const [tunnelEndpoint, setTunnelEndpoint] = useState("");
+  const [result, setResult] = useState(null);
+  const [latency, setLatency] = useState(null);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState("");
+  const { copied: copiedCurl, copy: copyCurl } = useCopyToClipboard();
+  const { copied: copiedRes, copy: copyRes } = useCopyToClipboard();
+
+  useEffect(() => {
+    setLocalEndpoint(window.location.origin);
+    fetch("/api/keys")
+      .then((r) => r.json())
+      .then((d) => { setApiKey((d.keys || []).find((k) => k.isActive !== false)?.key || ""); })
+      .catch(() => {});
+    fetch("/api/tunnel/status")
+      .then((r) => r.json())
+      .then((d) => { if (d.publicUrl) setTunnelEndpoint(d.publicUrl); })
+      .catch(() => {});
+    const loadCustom = () => {
+      fetch("/api/models/custom", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => {
+          const list = (d.models || []).filter((m) => m.type === "stt" && m.providerAlias === providerAlias);
+          setCustomSttModels(list);
+        })
+        .catch(() => {});
+    };
+    loadCustom();
+    window.addEventListener("focus", loadCustom);
+    window.addEventListener("customModelChanged", loadCustom);
+    return () => {
+      window.removeEventListener("focus", loadCustom);
+      window.removeEventListener("customModelChanged", loadCustom);
+    };
+  }, [providerAlias]);
+
+  const endpoint = useTunnel ? tunnelEndpoint : localEndpoint;
+  const modelFull = selectedModel ? `${providerAlias}/${selectedModel}` : "";
+
+  const curlSnippet = `curl -X POST ${endpoint}/v1/audio/transcriptions \\
+  -H "Authorization: Bearer ${apiKey || "YOUR_KEY"}" \\
+  -F "file=@${audioFile?.name || "audio.mp3"}" \\
+  -F "model=${modelFull}"${allowedParams.includes("language") && language ? ` \\\n  -F "language=${language}"` : ""}${allowedParams.includes("response_format") ? ` \\\n  -F "response_format=${responseFormat}"` : ""}${allowedParams.includes("temperature") && temperature ? ` \\\n  -F "temperature=${temperature}"` : ""}${allowedParams.includes("prompt") && prompt ? ` \\\n  -F "prompt=${prompt}"` : ""}`;
+
+  const handleRun = async () => {
+    if (!audioFile || !modelFull) return;
+    setRunning(true);
+    setError("");
+    setResult(null);
+    const start = Date.now();
+    try {
+      const fd = new FormData();
+      fd.append("file", audioFile);
+      fd.append("model", modelFull);
+      if (allowedParams.includes("language") && language) fd.append("language", language);
+      if (allowedParams.includes("response_format")) fd.append("response_format", responseFormat);
+      if (allowedParams.includes("temperature") && temperature) fd.append("temperature", temperature);
+      if (allowedParams.includes("prompt") && prompt) fd.append("prompt", prompt);
+
+      const headers = {};
+      if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+      const res = await fetch("/api/v1/audio/transcriptions", { method: "POST", headers, body: fd });
+      setLatency(Date.now() - start);
+      const ct = res.headers.get("content-type") || "";
+      const data = ct.includes("application/json") ? await res.json() : await res.text();
+      if (!res.ok) {
+        setError(data?.error?.message || data?.error || data || `HTTP ${res.status}`);
+        return;
+      }
+      setResult(data);
+    } catch (e) {
+      setError(e.message || "Network error");
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const resultStr = typeof result === "string" ? result : (result ? JSON.stringify(result, null, 2) : `{\n  "text": "Hello world..."\n}`);
+
+  return (
+    <Card>
+      <h2 className="text-lg font-semibold mb-4">Example</h2>
+      <div className="flex flex-col gap-2.5">
+        {/* Model */}
+        {sttModels.length > 0 ? (
+          <Row label="Model">
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+            >
+              {sttModels.map((m) => (
+                <option key={m.id} value={m.id}>{m.name || m.id}</option>
+              ))}
+            </select>
+          </Row>
+        ) : (
+          <Row label="Model">
+            <input
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              placeholder="Enter model id"
+              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary font-mono"
+            />
+          </Row>
+        )}
+
+        {/* Endpoint */}
+        <Row label="Endpoint">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <span className="w-full min-w-0 flex-1 px-3 py-1.5 text-sm font-mono text-text-main bg-sidebar rounded-lg truncate">
+              {endpoint}/v1/audio/transcriptions
+            </span>
+            {tunnelEndpoint && (
+              <button
+                onClick={() => setUseTunnel((v) => !v)}
+                title={useTunnel ? "Using tunnel" : "Using local"}
+                className={`flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border shrink-0 transition-colors ${
+                  useTunnel ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-text-muted hover:text-primary"
+                }`}
+              >
+                <span className="material-symbols-outlined text-[14px]">wifi_tethering</span>
+                Tunnel
+              </button>
+            )}
+          </div>
+        </Row>
+
+        {/* API Key */}
+        <Row label="API Key">
+          <span className="px-3 py-1.5 text-sm font-mono text-text-main bg-sidebar rounded-lg truncate block">
+            {apiKey ? `${apiKey.slice(0, 8)}${"\u2022".repeat(Math.min(20, apiKey.length - 8))}` : <span className="text-text-muted italic">No key configured</span>}
+          </span>
+        </Row>
+
+        {/* Audio file */}
+        <Row label="Audio File">
+          <div className="flex flex-col gap-2">
+            <input
+              type="file"
+              accept="audio/*,video/mp4,.m4a,.mp3,.wav,.ogg,.flac,.webm,.opus"
+              onChange={(e) => setAudioFile(e.target.files?.[0] || null)}
+              className="w-full text-xs text-text-muted file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border file:border-border file:bg-background file:text-text-main hover:file:bg-sidebar file:cursor-pointer"
+            />
+            {audioFile && (
+              <span className="text-xs text-text-muted font-mono">
+                {audioFile.name} · {(audioFile.size / 1024).toFixed(1)} KB
+              </span>
+            )}
+          </div>
+        </Row>
+
+        {/* Language (if model supports) */}
+        {allowedParams.includes("language") && (
+          <Row label="Language">
+            <input
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              placeholder="e.g. en, vi, ja (auto-detect if empty)"
+              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary font-mono"
+            />
+          </Row>
+        )}
+
+        {/* Prompt (if model supports) */}
+        {allowedParams.includes("prompt") && (
+          <Row label="Prompt">
+            <input
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="optional context to improve accuracy"
+              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+            />
+          </Row>
+        )}
+
+        {/* Temperature (if model supports) */}
+        {allowedParams.includes("temperature") && (
+          <Row label="Temperature">
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              max="1"
+              value={temperature}
+              onChange={(e) => setTemperature(e.target.value)}
+              placeholder="0 - 1 (default 0)"
+              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+            />
+          </Row>
+        )}
+
+        {/* Response format (if model supports) */}
+        {allowedParams.includes("response_format") && (
+          <Row label="Response Format">
+            <select
+              value={responseFormat}
+              onChange={(e) => setResponseFormat(e.target.value)}
+              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+            >
+              <option value="json">json</option>
+              <option value="text">text</option>
+              <option value="srt">srt</option>
+              <option value="verbose_json">verbose_json</option>
+              <option value="vtt">vtt</option>
+            </select>
+          </Row>
+        )}
+
+        {/* Curl + Run */}
+        <div className="mt-1">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-1.5">
+            <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">Request</span>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <button
+                onClick={() => copyCurl(curlSnippet)}
+                className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors"
+              >
+                <span className="material-symbols-outlined text-[14px]">{copiedCurl ? "check" : "content_copy"}</span>
+                {copiedCurl ? "Copied" : "Copy"}
+              </button>
+              <button
+                onClick={handleRun}
+                disabled={running || !audioFile || !modelFull}
+                className="flex w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span className="material-symbols-outlined text-[14px]" style={running ? { animation: "spin 1s linear infinite" } : undefined}>
+                  play_arrow
+                </span>
+                {running ? "Transcribing..." : "Run"}
+              </button>
+            </div>
+          </div>
+          <pre className="bg-sidebar rounded-lg px-3 py-2.5 text-xs font-mono text-text-main overflow-x-auto whitespace-pre-wrap break-all">{curlSnippet}</pre>
+        </div>
+
+        {error && <p className="text-xs text-red-500 break-words">{error}</p>}
+
+        {/* Response */}
+        <div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-1.5">
+            <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+              Response {result && latency && <span className="font-normal normal-case">&#9889; {latency}ms</span>}
+            </span>
+            {result && (
+              <button
+                onClick={() => copyRes(resultStr)}
+                className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors"
+              >
+                <span className="material-symbols-outlined text-[14px]">{copiedRes ? "check" : "content_copy"}</span>
+                {copiedRes ? "Copied" : "Copy"}
+              </button>
+            )}
+          </div>
+          <pre className="bg-sidebar rounded-lg px-3 py-2.5 text-xs font-mono text-text-main overflow-x-auto whitespace-pre-wrap break-all opacity-70">
+            {resultStr}
+          </pre>
         </div>
       </div>
     </Card>
@@ -1502,11 +1865,12 @@ export default function MediaProviderDetailPage() {
       )}
 
       {/* Provider Info — config-driven, supports searchConfig, fetchConfig, ttsConfig, embeddingConfig, searchViaChat */}
-      {!isCustom && (provider.searchConfig || provider.fetchConfig || provider.ttsConfig || provider.embeddingConfig || provider.searchViaChat) && (
+      {!isCustom && (provider.searchConfig || provider.fetchConfig || provider.ttsConfig || provider.sttConfig || provider.embeddingConfig || provider.searchViaChat) && (
         <ProviderInfoCard
           config={
             kind === "webFetch" ? provider.fetchConfig
               : kind === "tts" ? provider.ttsConfig
+              : kind === "stt" ? provider.sttConfig
               : kind === "embedding" ? provider.embeddingConfig
               : provider.searchConfig || { mode: "chat-completions", defaultModel: provider.searchViaChat?.defaultModel, pricingUrl: provider.searchViaChat?.pricingUrl, freeTier: provider.searchViaChat?.freeTier }
           }
@@ -1520,6 +1884,7 @@ export default function MediaProviderDetailPage() {
         <EmbeddingExampleCard providerId={id} customAlias={customNode?.prefix} />
       )}
       {kind === "tts" && <TtsExampleCard providerId={id} />}
+      {kind === "stt" && !isCustom && <SttExampleCard providerId={id} />}
       {!isCustom && KIND_EXAMPLE_CONFIG[kind] && <GenericExampleCard providerId={id} kind={kind} />}
 
       {isCustom && (

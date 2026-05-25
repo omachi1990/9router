@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Badge, Button, Card, CardSkeleton, Input, Modal, Toggle } from "@/shared/components";
+import { Badge, Button, Card, CardSkeleton, Input, Modal, Toggle, ConfirmModal } from "@/shared/components";
 import { useNotificationStore } from "@/store/notificationStore";
 
 function getStatusVariant(status) {
@@ -33,14 +33,21 @@ export default function ProxyPoolsPage() {
   const [showFormModal, setShowFormModal] = useState(false);
   const [showBatchImportModal, setShowBatchImportModal] = useState(false);
   const [showVercelModal, setShowVercelModal] = useState(false);
+  const [showCloudflareModal, setShowCloudflareModal] = useState(false);
   const [editingProxyPool, setEditingProxyPool] = useState(null);
   const [formData, setFormData] = useState(normalizeFormData());
   const [batchImportText, setBatchImportText] = useState("");
   const [vercelForm, setVercelForm] = useState({ vercelToken: "", projectName: "vercel-relay" });
+  const [cloudflareForm, setCloudflareForm] = useState({ accountId: "", apiToken: "", projectName: "cloudflare-relay" });
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [testingId, setTestingId] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [healthChecking, setHealthChecking] = useState(false);
+  const [healthProgress, setHealthProgress] = useState({ current: 0, total: 0 });
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [confirmState, setConfirmState] = useState(null);
   const notify = useNotificationStore();
 
   const fetchProxyPools = useCallback(async () => {
@@ -118,27 +125,31 @@ export default function ProxyPoolsPage() {
   };
 
   const handleDelete = async (proxyPool) => {
-    const deleting = confirm(`Delete proxy pool \"${proxyPool.name}\"?`);
-    if (!deleting) return;
+    setConfirmState({
+      title: "Delete Proxy Pool",
+      message: `Delete proxy pool "${proxyPool.name}"?`,
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          const res = await fetch(`/api/proxy-pools/${proxyPool.id}`, { method: "DELETE" });
+          if (res.ok) {
+            setProxyPools((prev) => prev.filter((item) => item.id !== proxyPool.id));
+            notify.success("Proxy pool deleted");
+            return;
+          }
 
-    try {
-      const res = await fetch(`/api/proxy-pools/${proxyPool.id}`, { method: "DELETE" });
-      if (res.ok) {
-        setProxyPools((prev) => prev.filter((item) => item.id !== proxyPool.id));
-        notify.success("Proxy pool deleted");
-        return;
+          const data = await res.json();
+          if (res.status === 409) {
+            notify.warning(`Cannot delete: ${data.boundConnectionCount || 0} connection(s) are still using this pool.`);
+          } else {
+            notify.error(data.error || "Failed to delete proxy pool");
+          }
+        } catch (error) {
+          console.log("Error deleting proxy pool:", error);
+          notify.error("Failed to delete proxy pool");
+        }
       }
-
-      const data = await res.json();
-      if (res.status === 409) {
-        notify.warning(`Cannot delete: ${data.boundConnectionCount || 0} connection(s) are still using this pool.`);
-      } else {
-        notify.error(data.error || "Failed to delete proxy pool");
-      }
-    } catch (error) {
-      console.log("Error deleting proxy pool:", error);
-      notify.error("Failed to delete proxy pool");
-    }
+    });
   };
 
   const handleTest = async (proxyPoolId) => {
@@ -162,6 +173,149 @@ export default function ProxyPoolsPage() {
     }
   };
 
+  const handleToggleActive = async (pool) => {
+    const next = !pool.isActive;
+    setProxyPools((prev) => prev.map((p) => p.id === pool.id ? { ...p, isActive: next } : p));
+    try {
+      const res = await fetch(`/api/proxy-pools/${pool.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: next }),
+      });
+      if (!res.ok) {
+        setProxyPools((prev) => prev.map((p) => p.id === pool.id ? { ...p, isActive: pool.isActive } : p));
+        notify.error("Failed to update active state");
+      }
+    } catch (error) {
+      console.log("Error toggling active:", error);
+      setProxyPools((prev) => prev.map((p) => p.id === pool.id ? { ...p, isActive: pool.isActive } : p));
+    }
+  };
+
+  const allSelected = proxyPools.length > 0 && selectedIds.length === proxyPools.length;
+  const toggleSelect = (id) => setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  const toggleSelectAll = () => setSelectedIds(allSelected ? [] : proxyPools.map((p) => p.id));
+  const clearSelection = () => setSelectedIds([]);
+
+  const bulkSetActive = async (isActive) => {
+    const targets = selectedIds.length > 0 ? selectedIds : proxyPools.map((p) => p.id);
+    if (targets.length === 0) return;
+    setBulkBusy(true);
+    try {
+      let ok = 0; let failed = 0;
+      for (const id of targets) {
+        try {
+          const res = await fetch(`/api/proxy-pools/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ isActive }),
+          });
+          if (res.ok) ok += 1; else failed += 1;
+        } catch { failed += 1; }
+      }
+      await fetchProxyPools();
+      notify.success(`${isActive ? "Activated" : "Deactivated"} ${ok}${failed ? `, failed ${failed}` : ""}`);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const bulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setConfirmState({
+      title: "Delete Proxy Pools",
+      message: `Delete ${selectedIds.length} proxy pool(s)?`,
+      onConfirm: async () => {
+        setConfirmState(null);
+        setBulkBusy(true);
+        try {
+          let ok = 0; let blocked = 0; let failed = 0;
+          for (const id of selectedIds) {
+            try {
+              const res = await fetch(`/api/proxy-pools/${id}`, { method: "DELETE" });
+              if (res.ok) ok += 1;
+              else if (res.status === 409) blocked += 1;
+              else failed += 1;
+            } catch { failed += 1; }
+          }
+          await fetchProxyPools();
+          clearSelection();
+          notify.success(`Deleted ${ok}${blocked ? `, ${blocked} bound` : ""}${failed ? `, ${failed} failed` : ""}`);
+        } finally {
+          setBulkBusy(false);
+        }
+      }
+    });
+  };
+
+  const handleHealthCheck = async () => {
+    const targets = selectedIds.length > 0
+      ? proxyPools.filter((p) => selectedIds.includes(p.id))
+      : proxyPools;
+    if (targets.length === 0) return;
+    setHealthChecking(true);
+    setHealthProgress({ current: 0, total: targets.length });
+    let alive = 0; const deadIds = [];
+    let done = 0;
+    const CONCURRENCY = 10;
+    const queue = [...targets];
+
+    const worker = async () => {
+      while (queue.length > 0) {
+        const pool = queue.shift();
+        if (!pool) break;
+        try {
+          const res = await fetch(`/api/proxy-pools/${pool.id}/test`, { method: "POST" });
+          const data = await res.json();
+          if (res.ok && data.ok) alive += 1; else deadIds.push(pool.id);
+        } catch {
+          deadIds.push(pool.id);
+        } finally {
+          done += 1;
+          setHealthProgress({ current: done, total: targets.length });
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, targets.length) }, worker));
+    await fetchProxyPools();
+    setHealthChecking(false);
+    setHealthProgress({ current: 0, total: 0 });
+
+    if (deadIds.length > 0) {
+      setConfirmState({
+        title: "Disable Dead Proxies",
+        message: `Alive: ${alive}, Dead: ${deadIds.length}.\n\nDisable ${deadIds.length} dead proxies?`,
+        onConfirm: async () => {
+          setConfirmState(null);
+          setBulkBusy(true);
+          try {
+            for (const id of deadIds) {
+              try {
+                await fetch(`/api/proxy-pools/${id}`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ isActive: false }),
+                });
+              } catch {}
+            }
+            await fetchProxyPools();
+            notify.success(`Disabled ${deadIds.length} dead proxies`);
+          } finally {
+            setBulkBusy(false);
+          }
+        }
+      });
+    } else {
+      notify.success(`Health check done. Alive: ${alive}, Dead: ${deadIds.length}`);
+    }
+  };
+
+  // Cleanup selectedIds when pools change
+  useEffect(() => {
+    setSelectedIds((prev) => prev.filter((id) => proxyPools.some((p) => p.id === id)));
+  }, [proxyPools]);
+
   const openBatchImportModal = () => {
     setBatchImportText("");
     setShowBatchImportModal(true);
@@ -180,6 +334,16 @@ export default function ProxyPoolsPage() {
   const closeVercelModal = () => {
     if (deploying) return;
     setShowVercelModal(false);
+  };
+
+  const openCloudflareModal = () => {
+    setCloudflareForm({ accountId: "", apiToken: "", projectName: "cloudflare-relay" });
+    setShowCloudflareModal(true);
+  };
+
+  const closeCloudflareModal = () => {
+    if (deploying) return;
+    setShowCloudflareModal(false);
   };
 
   const handleVercelDeploy = async () => {
@@ -201,6 +365,31 @@ export default function ProxyPoolsPage() {
       }
     } catch (error) {
       console.log("Error deploying Vercel relay:", error);
+      notify.error("Deploy failed");
+    } finally {
+      setDeploying(false);
+    }
+  };
+
+  const handleCloudflareDeploy = async () => {
+    if (!cloudflareForm.accountId.trim() || !cloudflareForm.apiToken.trim()) return;
+    setDeploying(true);
+    try {
+      const res = await fetch("/api/proxy-pools/cloudflare-deploy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cloudflareForm),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await fetchProxyPools();
+        closeCloudflareModal();
+        notify.success(`Deployed: ${data.deployUrl}`);
+      } else {
+        notify.error(data.error || "Deploy failed");
+      }
+    } catch (error) {
+      console.log("Error deploying Cloudflare relay:", error);
       notify.error("Deploy failed");
     } finally {
       setDeploying(false);
@@ -343,6 +532,9 @@ export default function ProxyPoolsPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center">
+          <Button size="sm" variant="secondary" icon="cloud" onClick={openCloudflareModal}>
+            Cloudflare Relay
+          </Button>
           <Button size="sm" variant="secondary" icon="cloud_upload" onClick={openVercelModal}>
             Vercel Relay
           </Button>
@@ -354,12 +546,56 @@ export default function ProxyPoolsPage() {
       </div>
 
       <Card>
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="default">Total: {proxyPools.length}</Badge>
-            <Badge variant="success">Active: {activeCount}</Badge>
-          </div>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {proxyPools.length > 0 && (
+            <label className="flex items-center gap-1.5 text-xs text-text-muted cursor-pointer">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleSelectAll}
+                className="size-4 rounded border-black/20 dark:border-white/20"
+              />
+              {allSelected ? "Unselect all" : "Select all"}
+            </label>
+          )}
+          <Badge variant="default">Total: {proxyPools.length}</Badge>
+          <Badge variant="success">Active: {activeCount}</Badge>
         </div>
+
+        {(selectedIds.length > 0 || healthChecking) && (
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+            <span className="material-symbols-outlined text-[18px] text-primary">checklist</span>
+            <span className="text-xs font-medium text-primary">
+              {selectedIds.length > 0 ? `${selectedIds.length} selected` : "All pools"}
+            </span>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                icon={healthChecking ? "progress_activity" : "health_and_safety"}
+                onClick={handleHealthCheck}
+                disabled={healthChecking || bulkBusy || proxyPools.length === 0}
+              >
+                {healthChecking ? `Checking ${healthProgress.current}/${healthProgress.total}` : "Health Check"}
+              </Button>
+              {selectedIds.length > 0 && (
+                <>
+                  <Button size="sm" variant="secondary" icon="toggle_on" onClick={() => bulkSetActive(true)} disabled={bulkBusy || healthChecking}>
+                    Activate
+                  </Button>
+                  <Button size="sm" variant="secondary" icon="toggle_off" onClick={() => bulkSetActive(false)} disabled={bulkBusy || healthChecking}>
+                    Deactivate
+                  </Button>
+                  <Button size="sm" variant="secondary" icon="delete" onClick={bulkDelete} disabled={bulkBusy || healthChecking}>
+                    Delete
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={clearSelection} disabled={bulkBusy || healthChecking}>
+                    Clear
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {proxyPools.length === 0 ? (
           <div className="text-center py-10">
@@ -372,8 +608,15 @@ export default function ProxyPoolsPage() {
         ) : (
           <div className="flex flex-col divide-y divide-black/[0.04] dark:divide-white/[0.05]">
             {proxyPools.map((pool) => (
-              <div key={pool.id} className="group flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0 flex-1">
+              <div key={pool.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(pool.id)}
+                    onChange={() => toggleSelect(pool.id)}
+                    className="mt-1 size-4 shrink-0 rounded border-black/20 dark:border-white/20"
+                  />
+                  <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="min-w-0 max-w-full truncate text-sm font-medium sm:max-w-[18rem]">{pool.name}</p>
                     <Badge variant={getStatusVariant(pool.testStatus)} size="sm" dot>
@@ -384,6 +627,9 @@ export default function ProxyPoolsPage() {
                     </Badge>
                     {pool.type === "vercel" && (
                       <Badge variant="default" size="sm">vercel relay</Badge>
+                    )}
+                    {pool.type === "cloudflare" && (
+                      <Badge variant="default" size="sm">cloudflare relay</Badge>
                     )}
                     <Badge variant="default" size="sm">
                       {pool.boundConnectionCount || 0} bound
@@ -397,9 +643,16 @@ export default function ProxyPoolsPage() {
                     Last tested: {formatDateTime(pool.lastTestedAt)}
                     {pool.lastError ? ` · ${pool.lastError}` : ""}
                   </p>
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+                <div className="flex items-center justify-end gap-1">
+                  <Toggle
+                    size="sm"
+                    checked={pool.isActive === true}
+                    onChange={() => handleToggleActive(pool)}
+                    title={pool.isActive ? "Disable" : "Enable"}
+                  />
                   <button
                     onClick={() => handleTest(pool.id)}
                     className="p-2 rounded hover:bg-black/5 dark:hover:bg-white/5 text-text-muted hover:text-primary"
@@ -513,6 +766,70 @@ export default function ProxyPoolsPage() {
       </Modal>
 
       <Modal
+        isOpen={showCloudflareModal}
+        title="Deploy Cloudflare Relay"
+        onClose={closeCloudflareModal}
+      >
+        <div className="flex flex-col gap-4">
+          <div className="rounded-lg bg-orange-500/5 border border-orange-500/10 p-3 flex flex-col gap-1.5">
+            <p className="text-sm text-text-main font-medium">What is Cloudflare Relay?</p>
+            <p className="text-xs text-text-muted">
+              Deploys a Cloudflare Worker as a proxy relay. All AI provider requests will be forwarded through Cloudflare&apos;s global edge network.
+            </p>
+            <ul className="text-xs text-text-muted list-disc pl-4 space-y-0.5">
+              <li>High performance global routing and IP masking via Cloudflare Workers</li>
+              <li>Free tier: 100,000 requests per day</li>
+              <li>Requires Cloudflare Account ID and a Workers API Token (Edit Workers permission)</li>
+            </ul>
+            <div className="mt-2 pt-2 border-t border-orange-500/10 text-xs text-text-muted">
+              <p className="font-medium text-text-main mb-1">How to generate your API Token:</p>
+              <ol className="list-decimal pl-4 space-y-0.5">
+                <li>Go to <b>My Profile</b> → <b>API Tokens</b> → <b>Create Token</b></li>
+                <li>Scroll down to <b>Custom Token</b> and click <b>Get started</b></li>
+                <li>Under <b>Permissions</b>: Account | Workers Scripts | Edit</li>
+                <li>Under <b>Account Resources</b>: Include | Account | <i>Your Account Name</i></li>
+                <li>Click <b>Continue to summary</b> → <b>Create Token</b></li>
+              </ol>
+            </div>
+          </div>
+          <Input
+            label="Account ID"
+            value={cloudflareForm.accountId}
+            onChange={(e) => setCloudflareForm((prev) => ({ ...prev, accountId: e.target.value }))}
+            placeholder="your-cloudflare-account-id"
+            hint={<>Found on the right side of the Cloudflare dashboard overview page.</>}
+          />
+          <Input
+            label="API Token"
+            value={cloudflareForm.apiToken}
+            onChange={(e) => setCloudflareForm((prev) => ({ ...prev, apiToken: e.target.value }))}
+            placeholder="your-cloudflare-api-token"
+            hint={<>Requires "Workers Scripts: Edit" permission. <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Get token →</a></>}
+            type="password"
+          />
+          <Input
+            label="Worker Name"
+            value={cloudflareForm.projectName}
+            onChange={(e) => setCloudflareForm((prev) => ({ ...prev, projectName: e.target.value }))}
+            placeholder="my-relay"
+            hint="Unique name for your Cloudflare Worker. Leave empty for auto-generated name."
+          />
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <Button
+              fullWidth
+              onClick={handleCloudflareDeploy}
+              disabled={!cloudflareForm.accountId.trim() || !cloudflareForm.apiToken.trim() || deploying}
+            >
+              {deploying ? "Deploying..." : "Deploy Worker"}
+            </Button>
+            <Button fullWidth variant="ghost" onClick={closeCloudflareModal} disabled={deploying}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
         isOpen={showFormModal}
         title={editingProxyPool ? "Edit Proxy Pool" : "Add Proxy Pool"}
         onClose={closeFormModal}
@@ -576,6 +893,16 @@ export default function ProxyPoolsPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Confirm Modal */}
+      <ConfirmModal
+        isOpen={!!confirmState}
+        onClose={() => setConfirmState(null)}
+        onConfirm={confirmState?.onConfirm}
+        title={confirmState?.title || "Confirm"}
+        message={confirmState?.message}
+        variant="danger"
+      />
     </div>
   );
 }
