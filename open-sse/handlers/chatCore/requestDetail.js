@@ -44,11 +44,12 @@ export function extractUsageFromResponse(responseBody) {
   }
 
   // Gemini format
-  if (responseBody.usageMetadata) {
+  const geminiBody = responseBody.response || responseBody;
+  if (geminiBody.usageMetadata) {
     return {
-      prompt_tokens: responseBody.usageMetadata.promptTokenCount || 0,
-      completion_tokens: responseBody.usageMetadata.candidatesTokenCount || 0,
-      reasoning_tokens: responseBody.usageMetadata.thoughtsTokenCount
+      prompt_tokens: geminiBody.usageMetadata.promptTokenCount || 0,
+      completion_tokens: geminiBody.usageMetadata.candidatesTokenCount || 0,
+      reasoning_tokens: geminiBody.usageMetadata.thoughtsTokenCount
     };
   }
 
@@ -99,5 +100,5 @@ export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, 
     connectionId: connectionId || undefined,
     apiKey: apiKey || undefined,
     endpoint: endpoint || null
-  }).catch(() => {});
+  }).catch((e) => { console.error("SAVE USAGE ERROR:", e); });
 }
