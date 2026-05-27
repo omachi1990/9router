@@ -4,11 +4,11 @@
   "description": "9Router web dashboard",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack --port 20128",
-    "build": "next build --webpack && (cp -r ${NEXT_DIST_DIR:-.next}/static ${NEXT_DIST_DIR:-.next}/standalone/.next/ || true) && (cp -r public ${NEXT_DIST_DIR:-.next}/standalone/ || true)",
+    "dev": "next dev --port 20128",
+    "build": "next build && (cp -r ${NEXT_DIST_DIR:-.next}/static ${NEXT_DIST_DIR:-.next}/standalone/.next/ || true) && (cp -r public ${NEXT_DIST_DIR:-.next}/standalone/ || true)",
     "start": "next start",
-    "dev:bun": "bun --bun next dev --webpack --port 20128",
-    "build:bun": "bun --bun next build --webpack",
+    "dev:bun": "bun --bun next dev --port 20128",
+    "build:bun": "bun --bun next build",
     "start:bun": "bun ./.next/standalone/server.js"
   },
   "dependencies": {
