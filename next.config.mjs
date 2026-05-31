@@ -24,7 +24,7 @@ const nextConfig = {
     unoptimized: true
   },
   env: {},
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, webpack }) => {
     // Ignore fs/path modules in browser bundle
     if (!isServer) {
       config.resolve.fallback = {
@@ -35,6 +35,10 @@ const nextConfig = {
     }
     // Exclude logs, .next, gitbook subapp from watcher
     config.watchOptions = { ...config.watchOptions, ignored: /[\\/](logs|\.next|gitbook|cli)[\\/]/ };
+    
+    // Ignore better-sqlite3 since it might fail to install on Windows
+    config.plugins.push(new webpack.IgnorePlugin({ resourceRegExp: /^better-sqlite3$/ }));
+    
     return config;
   },
   async rewrites() {
