@@ -55,6 +55,16 @@ const nextConfig = {
         source: "/codex/:path*",
         destination: "/api/v1/responses"
       },
+      // Gemini-format endpoint: allows setting CLOUD_CODE_URL=http://localhost:20128
+      // Antigravity CLI uses /v1beta/models/{model}:generateContent
+      {
+        source: "/v1beta/:path*",
+        destination: "/api/v1beta/:path*"
+      },
+      {
+        source: "/v1beta",
+        destination: "/api/v1beta"
+      },
       {
         source: "/v1/:path*",
         destination: "/api/v1/:path*"
