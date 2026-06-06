@@ -1,0 +1,11 @@
+
+> 9router-app@0.4.66 start
+> node .next/standalone/server.js
+
+▲ Next.js 16.2.6
+- Local:         http://localhost:20128
+- Network:       http://0.0.0.0:20128
+✓ Ready in 0ms
+[Instrumentation] Registering...
+[Instrumentation] Runtime is Node.js, initializing app...
+[DB] Driver: sql.js | file: \var\lib\9router\db\data.sqlite
