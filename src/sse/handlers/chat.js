@@ -240,9 +240,8 @@ export async function handleChat(request, clientRawRequest = null) {
       sourceFormatOverride: request?.url ? detectFormatByEndpoint(new URL(request.url).pathname, body) : null,
       onCredentialsRefreshed: async (newCreds) => {
         await updateProviderCredentials(credentials.connectionId, {
-          accessToken: newCreds.accessToken,
-          refreshToken: newCreds.refreshToken,
-          providerSpecificData: newCreds.providerSpecificData,
+          ...newCreds,
+          existingProviderSpecificData: credentials.providerSpecificData,
           testStatus: "active"
         });
       },
