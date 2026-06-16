@@ -1,15 +1,57 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { getStatusVariant as getConnectionStatusVariant } from "@/shared/utils/connectionStatus";
 import PropTypes from "prop-types";
 import { Badge, Toggle } from "@/shared/components";
+import { USAGE_APIKEY_PROVIDERS } from "@/shared/constants/providers";
 import CooldownTimer from "./CooldownTimer";
 
 export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMoveUp, onMoveDown, onToggleActive, onUpdateProxy, onEdit, onDelete, oneByOneStatus = null }) {
   const [showProxyDropdown, setShowProxyDropdown] = useState(false);
   const [updatingProxy, setUpdatingProxy] = useState(false);
   const proxyDropdownRef = useRef(null);
+
+  // Inline Quota state
+  const [quota, setQuota] = useState(null);
+  const [loadingQuota, setLoadingQuota] = useState(false);
+  const [quotaError, setQuotaError] = useState(null);
+
+  const isEligibleForQuota = isOAuth || (connection.authType === "oauth") || USAGE_APIKEY_PROVIDERS.includes(connection.provider);
+
+  const fetchQuota = useCallback(async () => {
+    if (!isEligibleForQuota || connection.isActive === false) return;
+    setLoadingQuota(true);
+    setQuotaError(null);
+    try {
+      const res = await fetch(`/api/usage/${connection.id}`);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || res.statusText || "Failed to fetch quota");
+      }
+      const data = await res.json();
+      
+      if (data.message && !data.quotas) {
+        setQuota({ message: data.message });
+      } else if (data.quotas) {
+        const quotasList = Object.entries(data.quotas).map(([name, q]) => ({
+          name: q.displayName || name,
+          used: q.used || 0,
+          total: q.total || 0,
+          unit: q.unit || "",
+          resetAt: q.resetAt || null,
+          remainingPercentage: q.remainingPercentage
+        }));
+        setQuota({ quotas: quotasList, plan: data.plan || null, message: data.message || null });
+      } else {
+        setQuota({ message: "No quota details returned." });
+      }
+    } catch (err) {
+      setQuotaError(err.message);
+    } finally {
+      setLoadingQuota(false);
+    }
+  }, [connection.id, connection.provider, isEligibleForQuota, connection.isActive]);
 
   const proxyPoolMap = new Map((proxyPools || []).map((pool) => [pool.id, pool]));
   const boundProxyPoolId = connection.providerSpecificData?.proxyPoolId || null;
@@ -108,6 +150,12 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
     ? "active"  // Cooldown expired u2192 treat as active
     : connection.testStatus;
 
+  useEffect(() => {
+    if (isEligibleForQuota && connection.isActive !== false && effectiveStatus === "active") {
+      fetchQuota();
+    }
+  }, [fetchQuota, effectiveStatus]);
+
   const getStatusVariant = () => getConnectionStatusVariant(connection.isActive, effectiveStatus);
 
   const getOneByOneVariant = () => {
@@ -194,6 +242,75 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
                 <span className="max-w-full truncate text-[11px] text-text-muted sm:max-w-[320px]" title={noProxyText}>
                   no_proxy: {noProxyText}
                 </span>
+              )}
+            </div>
+          )}
+
+          {/* Quota Section */}
+          {isEligibleForQuota && connection.isActive !== false && (
+            <div className="mt-2 flex flex-col gap-1 text-xs border-t border-black/[0.03] dark:border-white/[0.03] pt-2">
+              {loadingQuota ? (
+                <div className="flex items-center gap-1.5 text-text-muted">
+                  <span className="material-symbols-outlined text-[14px] animate-spin">sync</span>
+                  <span>Loading quota...</span>
+                </div>
+              ) : quotaError ? (
+                <div className="flex items-center gap-1.5 text-red-500">
+                  <span className="material-symbols-outlined text-[14px]">error</span>
+                  <span>Failed to load quota: {quotaError}</span>
+                  <button onClick={fetchQuota} className="text-[10px] underline hover:text-red-600 ml-1">Retry</button>
+                </div>
+              ) : quota ? (
+                <div className="flex flex-col gap-1.5">
+                  {quota.message && !quota.quotas?.length && (
+                    <span className="text-text-muted italic">{quota.message}</span>
+                  )}
+                  {quota.quotas && quota.quotas.map((q) => {
+                    const pct = q.total > 0 ? Math.min(100, Math.max(0, (q.used / q.total) * 100)) : 0;
+                    const remainingPct = 100 - pct;
+                    const isLow = remainingPct < 20;
+                    const isMedium = remainingPct >= 20 && remainingPct < 50;
+                    const barColor = isLow ? "bg-red-500" : isMedium ? "bg-yellow-500" : "bg-primary";
+                    
+                    return (
+                      <div key={q.name} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                        <span className="font-medium text-text-main min-w-[100px] truncate" title={q.name}>{q.name}</span>
+                        <div className="flex items-center gap-2 flex-1 max-w-[240px]">
+                          <div className="h-1.5 w-full rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
+                            <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }}></div>
+                          </div>
+                          <span className="text-[10px] text-text-muted shrink-0 min-w-[65px] text-right">
+                            {q.used}/{q.total}{q.unit || ""}
+                          </span>
+                        </div>
+                        {q.resetAt && (
+                          <span className="text-[10px] text-text-muted truncate" title={new Date(q.resetAt).toLocaleString()}>
+                            Resets: {new Date(q.resetAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {/* Refresh button */}
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <button 
+                      onClick={fetchQuota} 
+                      className="flex items-center gap-0.5 text-[10px] text-text-muted hover:text-primary transition-colors"
+                      title="Refresh Quota"
+                    >
+                      <span className="material-symbols-outlined text-[12px]">sync</span>
+                      <span>Refresh quota</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button 
+                  onClick={fetchQuota} 
+                  className="flex items-center gap-1 text-[10px] text-primary hover:underline w-fit"
+                >
+                  <span className="material-symbols-outlined text-[12px]">query_stats</span>
+                  <span>Check Quota</span>
+                </button>
               )}
             </div>
           )}
