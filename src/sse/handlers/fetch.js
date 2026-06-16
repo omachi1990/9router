@@ -144,13 +144,15 @@ async function handleSingleProviderFetch(body, providerInput, request, apiKey, s
     return errorResponse(result.status || HTTP_STATUS.BAD_GATEWAY, result.error || "Fetch failed");
   }
 
+  const preferredConnectionId = request?.headers?.get("x-connection-id") || null;
+
   // Credential + fallback loop
   const excludeConnectionIds = new Set();
   let lastError = null;
   let lastStatus = null;
 
   while (true) {
-    const credentials = await getProviderCredentials(providerId, excludeConnectionIds);
+    const credentials = await getProviderCredentials(providerId, excludeConnectionIds, null, { preferredConnectionId });
 
     if (!credentials || credentials.allRateLimited) {
       if (credentials?.allRateLimited) {

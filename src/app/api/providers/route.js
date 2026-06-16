@@ -83,12 +83,12 @@ export async function GET() {
   }
 }
 
-// POST /api/providers - Create new connection (API Key only, OAuth via separate flow)
+// POST /api/providers - Create new connection (API Key only, OAuth via separate flow or manual JSON import)
 export async function POST(request) {
   try {
     const body = await request.json();
     const provider = normalizeProviderId(body.provider);
-    const { apiKey, name, displayName, priority, globalPriority, defaultModel, testStatus } = body;
+    const { apiKey, name, displayName, priority, globalPriority, defaultModel, testStatus, authType, accessToken, refreshToken, idToken } = body;
     const proxyConfig = normalizeProxyConfig(body);
     if (proxyConfig.error) {
       return NextResponse.json({ error: proxyConfig.error }, { status: 400 });
@@ -102,6 +102,7 @@ export async function POST(request) {
 
     // Validation
     const isWebCookieProvider = !!WEB_COOKIE_PROVIDERS[provider];
+    const resolvedAuthType = authType || (isWebCookieProvider ? "cookie" : "apikey");
     const isValidProvider = APIKEY_PROVIDERS[provider] ||
       FREE_TIER_PROVIDERS[provider] ||
       isWebCookieProvider ||
@@ -112,7 +113,7 @@ export async function POST(request) {
     if (!provider || !isValidProvider) {
       return NextResponse.json({ error: "Invalid provider" }, { status: 400 });
     }
-    if (!apiKey && provider !== "ollama-local") {
+    if (!apiKey && resolvedAuthType !== "oauth" && provider !== "ollama-local") {
       return NextResponse.json({ error: `${isWebCookieProvider ? "Cookie value" : "API Key"} is required` }, { status: 400 });
     }
     const connectionName = name || displayName || AI_PROVIDERS[provider]?.name;
@@ -183,9 +184,12 @@ export async function POST(request) {
 
     const newConnection = await createProviderConnection({
       provider,
-      authType: isWebCookieProvider ? "cookie" : "apikey",
+      authType: resolvedAuthType,
       name: connectionName,
       apiKey: apiKey || "",
+      accessToken: accessToken || null,
+      refreshToken: refreshToken || null,
+      idToken: idToken || null,
       priority: priority || 1,
       globalPriority: globalPriority || null,
       defaultModel: defaultModel || null,
@@ -197,6 +201,9 @@ export async function POST(request) {
     // Hide sensitive fields
     const result = { ...newConnection };
     delete result.apiKey;
+    delete result.accessToken;
+    delete result.refreshToken;
+    delete result.idToken;
 
     return NextResponse.json({ connection: result }, { status: 201 });
   } catch (error) {

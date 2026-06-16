@@ -77,7 +77,15 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       }
     });
 
-    if (availableConnections.length === 0) {
+    let connection = null;
+    if (preferredConnectionId) {
+      connection = connections.find((c) => c.id === preferredConnectionId);
+      if (connection) {
+        log.info("AUTH", `${provider} | pinned to preferred connection ${connection.id?.slice(0, 8)} (${connection.name || connection.email || "unnamed"})`);
+      }
+    }
+
+    if (!connection && availableConnections.length === 0) {
       // Find earliest lock expiry across all connections for retry timing
       const lockedConns = connections.filter(c => isModelLockActive(c, model));
       const expiries = lockedConns.map(c => getEarliestModelLockUntil(c)).filter(Boolean);
@@ -97,22 +105,13 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       return null;
     }
 
-    const settings = await getSettings();
-    // Per-provider strategy overrides global setting
-    const providerOverride = (settings.providerStrategies || {})[providerId] || {};
-    const strategy = providerOverride.fallbackStrategy || settings.fallbackStrategy || "fill-first";
+    if (!connection) {
+      const settings = await getSettings();
+      // Per-provider strategy overrides global setting
+      const providerOverride = (settings.providerStrategies || {})[providerId] || {};
+      const strategy = providerOverride.fallbackStrategy || settings.fallbackStrategy || "fill-first";
 
-    let connection;
-    // Pin to preferred connection if specified and available
-    if (preferredConnectionId) {
-      connection = availableConnections.find((c) => c.id === preferredConnectionId);
-      if (connection) {
-        log.info("AUTH", `${provider} | pinned to ${connection.id?.slice(0, 8)} (${connection.name || connection.email || "unnamed"})`);
-      }
-    }
-    if (connection) {
-      // skip strategy
-    } else if (strategy === "round-robin") {
+      if (strategy === "round-robin") {
       const stickyLimit = providerOverride.stickyRoundRobinLimit || settings.stickyRoundRobinLimit || 3;
 
       // Sort by lastUsed (most recent first) to find current candidate
@@ -154,6 +153,7 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
     } else {
       // Default: fill-first (already sorted by priority in getProviderConnections)
       connection = availableConnections[0];
+    }
     }
 
     const resolvedProxy = await resolveConnectionProxyConfig(connection.providerSpecificData || {});

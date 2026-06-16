@@ -78,13 +78,15 @@ async function handleSingleModelTts(body, modelStr, responseFormat, language) {
     return errorResponse(result.status || HTTP_STATUS.BAD_GATEWAY, result.error || "TTS failed");
   }
 
+  const preferredConnectionId = request?.headers?.get("x-connection-id") || null;
+
   // Credentialed providers — fallback loop (same pattern as embeddings)
   const excludeConnectionIds = new Set();
   let lastError = null;
   let lastStatus = null;
 
   while (true) {
-    const credentials = await getProviderCredentials(provider, excludeConnectionIds, model);
+    const credentials = await getProviderCredentials(provider, excludeConnectionIds, model, { preferredConnectionId });
 
     if (!credentials || credentials.allRateLimited) {
       if (credentials?.allRateLimited) {

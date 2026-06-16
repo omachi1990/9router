@@ -70,7 +70,7 @@ function CompatibleModelRow({ modelId, fullModel, copied, onCopy, onDeleteAlias,
   );
 }
 
-export default function CompatibleModelsSection({ providerStorageAlias, providerDisplayAlias, modelAliases, copied, onCopy, onSetAlias, onDeleteAlias, connections, isAnthropic }) {
+export default function CompatibleModelsSection({ providerStorageAlias, providerDisplayAlias, modelAliases, copied, onCopy, onSetAlias, onDeleteAlias, connections, isAnthropic, onTestModel }) {
   const [newModel, setNewModel] = useState("");
   const [adding, setAdding] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -223,9 +223,9 @@ export default function CompatibleModelsSection({ providerStorageAlias, provider
               copied={copied}
               onCopy={onCopy}
               onDeleteAlias={() => onDeleteAlias(alias)}
-              onTest={connections.length > 0 ? () => handleTestModel(modelId) : undefined}
-              testStatus={modelTestResults[modelId]}
-              isTesting={testingModelId === modelId}
+              onTest={connections.length > 0 ? (onTestModel ? () => onTestModel(modelId) : () => handleTestModel(modelId)) : undefined}
+              testStatus={onTestModel ? undefined : modelTestResults[modelId]}
+              isTesting={onTestModel ? false : testingModelId === modelId}
             />
           ))}
         </div>

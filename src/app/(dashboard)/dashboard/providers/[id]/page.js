@@ -17,6 +17,7 @@ import ConnectionRow from "./ConnectionRow";
 import AddApiKeyModal from "./AddApiKeyModal";
 import EditCompatibleNodeModal from "./EditCompatibleNodeModal";
 import AddCustomModelModal from "./AddCustomModelModal";
+import ModelCheckModal from "./ModelCheckModal";
 
 const ONE_BY_ONE_DELAY_MS = 1000;
 
@@ -45,6 +46,7 @@ export default function ProviderDetailPage() {
   const [modelTestResults, setModelTestResults] = useState({});
   const [modelsTestError, setModelsTestError] = useState("");
   const [testingModelId, setTestingModelId] = useState(null);
+  const [activeCheckModelId, setActiveCheckModelId] = useState(null);
   const [showAddCustomModel, setShowAddCustomModel] = useState(false);
   const [selectedConnectionIds, setSelectedConnectionIds] = useState([]);
   const [bulkProxyPoolId, setBulkProxyPoolId] = useState("__none__");
@@ -904,6 +906,7 @@ export default function ProviderDetailPage() {
           onDeleteAlias={handleDeleteAlias}
           connections={connections}
           isAnthropic={isAnthropicCompatible}
+          onTestModel={(modelId) => setActiveCheckModelId(modelId)}
         />
       );
     }
@@ -947,7 +950,7 @@ export default function ProviderDetailPage() {
             onSetAlias={() => {}}
             onDeleteAlias={() => handleDeleteAlias(model.alias)}
             testStatus={modelTestResults[model.id]}
-            onTest={connections.length > 0 || isFreeNoAuth ? () => handleTestModel(model.id) : undefined}
+            onTest={connections.length > 0 ? () => setActiveCheckModelId(model.id) : (isFreeNoAuth ? () => handleTestModel(model.id) : undefined)}
             isTesting={testingModelId === model.id}
             isCustom
             isFree={false}
@@ -971,7 +974,7 @@ export default function ProviderDetailPage() {
               onSetAlias={(alias) => handleSetAlias(model.id, alias, providerStorageAlias)}
               onDeleteAlias={() => handleDeleteAlias(existingAlias)}
               testStatus={modelTestResults[model.id]}
-              onTest={connections.length > 0 || isFreeNoAuth ? () => handleTestModel(model.id) : undefined}
+              onTest={connections.length > 0 ? () => setActiveCheckModelId(model.id) : (isFreeNoAuth ? () => handleTestModel(model.id) : undefined)}
               isTesting={testingModelId === model.id}
               isFree={model.isFree}
               onDisable={() => handleDisableModel(model.id)}
@@ -1564,6 +1567,20 @@ export default function ProviderDetailPage() {
         title={confirmState?.title || "Confirm"}
         message={confirmState?.message}
         variant="danger"
+      />
+
+      <ModelCheckModal
+        isOpen={!!activeCheckModelId}
+        modelId={activeCheckModelId}
+        providerId={providerId}
+        providerStorageAlias={providerStorageAlias}
+        connections={connections}
+        proxyPools={proxyPools}
+        onClose={() => {
+          setActiveCheckModelId(null);
+          fetchConnections();
+        }}
+        onUpdateConnections={fetchConnections}
       />
     </div>
   );
