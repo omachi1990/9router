@@ -654,6 +654,34 @@ export default function ProviderDetailPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleExportConnection = (connection) => {
+    const exportData = {
+      name: connection.name,
+      displayName: connection.displayName,
+      email: connection.email,
+      authType: connection.authType,
+      apiKey: connection.apiKey,
+      accessToken: connection.accessToken,
+      refreshToken: connection.refreshToken,
+      idToken: connection.idToken,
+      priority: connection.priority,
+      globalPriority: connection.globalPriority,
+      defaultModel: connection.defaultModel,
+      providerSpecificData: connection.providerSpecificData,
+      proxyPoolId: connection.providerSpecificData?.proxyPoolId || null,
+      connectionProxyEnabled: connection.providerSpecificData?.connectionProxyEnabled,
+      connectionProxyUrl: connection.providerSpecificData?.connectionProxyUrl,
+      connectionNoProxy: connection.providerSpecificData?.connectionNoProxy,
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${connection.name || connection.id}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleStopOneByOneTest = () => {
     if (!oneByOneRunning) return;
     stopOneByOneRef.current = true;
@@ -908,6 +936,7 @@ export default function ProviderDetailPage() {
                     console.log("Error updating proxy:", error);
                   }
                 }}
+                onExport={() => handleExportConnection(conn)}
                 onEdit={() => {
                   setSelectedConnection(conn);
                   setShowEditModal(true);
