@@ -40,12 +40,15 @@ const nextConfig = {
         path: false,
       };
     }
-    // Exclude logs, .next, gitbook subapp from watcher
-    config.watchOptions = { ...config.watchOptions, ignored: /[\\/](logs|\.next|gitbook|cli)[\\/]/ };
-    
+    // Exclude non-source dirs from watcher to reduce inotify load
+    config.watchOptions = {
+      ...config.watchOptions,
+      aggregateTimeout: 300,
+      ignored: /[\\/](node_modules|\.git|logs|\.next|\.next-cli-build|gitbook|cli|open-sse\.old|tests|docs)[\\/]/,
+    };
+
     // Ignore better-sqlite3 since it might fail to install on Windows
     config.plugins.push(new webpack.IgnorePlugin({ resourceRegExp: /^better-sqlite3$/ }));
-    
     return config;
   },
   async rewrites() {
@@ -71,6 +74,10 @@ const nextConfig = {
       {
         source: "/v1beta",
         destination: "/api/v1beta"
+      },
+      {
+        source: "/responses",
+        destination: "/api/v1/responses"
       },
       {
         source: "/v1/:path*",
