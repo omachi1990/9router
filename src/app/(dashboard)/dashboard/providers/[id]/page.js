@@ -1718,13 +1718,15 @@ export default function ProviderDetailPage() {
         />
       )}
 
-      <ImportAccountsModal
-        isOpen={showImportModal}
-        providerId={providerId}
-        existingConnections={connections}
-        onClose={() => setShowImportModal(false)}
-        onSuccess={fetchConnections}
-      />
+      {showImportModal && (
+        <ImportAccountsModal
+          isOpen={showImportModal}
+          providerId={providerId}
+          existingConnections={connections}
+          onClose={() => setShowImportModal(false)}
+          onSuccess={fetchConnections}
+        />
+      )}
 
       {/* AG Risk Confirmation Modal */}
       <ConfirmModal
