@@ -21,6 +21,7 @@ import EditCompatibleNodeModal from "./EditCompatibleNodeModal";
 import AddCustomModelModal from "./AddCustomModelModal";
 import ModelCheckModal from "./ModelCheckModal";
 import BulkImportCodexModal from "./BulkImportCodexModal";
+import ImportAccountsModal from "./ImportAccountsModal";
 
 const ONE_BY_ONE_DELAY_MS = 1000;
 
@@ -42,6 +43,7 @@ export default function ProviderDetailPage() {
   const [showAddApiKeyModal, setShowAddApiKeyModal] = useState(false);
   const [addConnectionError, setAddConnectionError] = useState("");
   const [showBulkImportCodex, setShowBulkImportCodex] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showEditNodeModal, setShowEditNodeModal] = useState(false);
   const [showBulkProxyModal, setShowBulkProxyModal] = useState(false);
@@ -622,6 +624,34 @@ export default function ProviderDetailPage() {
       setOneByOneStopping(false);
       stopOneByOneRef.current = false;
     }
+  };
+
+  const handleExportConnections = () => {
+    const exportData = connections.map((conn) => ({
+      name: conn.name,
+      displayName: conn.displayName,
+      email: conn.email,
+      authType: conn.authType,
+      apiKey: conn.apiKey,
+      accessToken: conn.accessToken,
+      refreshToken: conn.refreshToken,
+      idToken: conn.idToken,
+      priority: conn.priority,
+      globalPriority: conn.globalPriority,
+      defaultModel: conn.defaultModel,
+      providerSpecificData: conn.providerSpecificData,
+      proxyPoolId: conn.providerSpecificData?.proxyPoolId || null,
+      connectionProxyEnabled: conn.providerSpecificData?.connectionProxyEnabled,
+      connectionProxyUrl: conn.providerSpecificData?.connectionProxyUrl,
+      connectionNoProxy: conn.providerSpecificData?.connectionNoProxy,
+    }));
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${providerId}-accounts-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleStopOneByOneTest = () => {
@@ -1320,6 +1350,24 @@ export default function ProviderDetailPage() {
                   Apply Proxy
                 </Button>
               )}
+              <Button
+                size="sm"
+                variant="secondary"
+                icon="download"
+                onClick={() => setShowImportModal(true)}
+              >
+                Import
+              </Button>
+              {connections.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon="upload"
+                  onClick={handleExportConnections}
+                >
+                  Export
+                </Button>
+              )}
               {connections.length > 0 && (
                 <>
                   <Button
@@ -1640,6 +1688,14 @@ export default function ProviderDetailPage() {
           onSuccess={fetchConnections}
         />
       )}
+
+      <ImportAccountsModal
+        isOpen={showImportModal}
+        providerId={providerId}
+        existingConnections={connections}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={fetchConnections}
+      />
 
       {/* AG Risk Confirmation Modal */}
       <ConfirmModal
