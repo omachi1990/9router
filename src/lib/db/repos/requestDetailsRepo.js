@@ -99,6 +99,7 @@ async function flushToDatabase() {
             providerResponse: truncateField(item.providerResponse, config.maxJsonSize),
             response: truncateField(item.response, config.maxJsonSize),
             comboPath: item.comboPath || null,
+            pxpipe: item.pxpipe || undefined,
           };
 
           db.run(
@@ -173,6 +174,12 @@ export async function getRequestDetails(filter = {}) {
     details,
     pagination: { page, pageSize, totalItems, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
   };
+}
+
+export async function getDistinctProviders() {
+  const db = await getAdapter();
+  const rows = db.all(`SELECT DISTINCT provider FROM requestDetails WHERE provider IS NOT NULL ORDER BY provider ASC`);
+  return rows.map((r) => r.provider);
 }
 
 export async function getRequestDetailById(id) {
