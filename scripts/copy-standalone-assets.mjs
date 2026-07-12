@@ -1,6 +1,6 @@
 import { cp, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 
 const distDir = process.env.NEXT_DIST_DIR || ".next";
 const standaloneDir = join(distDir, "standalone");
@@ -18,4 +18,17 @@ if (existsSync(staticDir)) {
 
 if (existsSync("public")) {
   await cp("public", join(standaloneDir, "public"), { recursive: true, force: true });
+}
+
+const sqlJsWasmDir = join("node_modules", "sql.js", "dist");
+const standaloneSqlJsDir = join(standaloneDir, sqlJsWasmDir);
+if (existsSync(sqlJsWasmDir) && !existsSync(join(standaloneSqlJsDir, "sql-wasm.wasm"))) {
+  await mkdir(standaloneSqlJsDir, { recursive: true });
+  for (const f of ["sql-wasm.wasm", "sql-wasm-debug.wasm", "sql-wasm-browser.wasm", "sql-wasm-browser-debug.wasm"]) {
+    const src = join(sqlJsWasmDir, f);
+    if (existsSync(src)) {
+      await cp(src, join(standaloneSqlJsDir, f), { force: true });
+    }
+  }
+  console.log("[build] Copied sql.js wasm files to standalone");
 }
