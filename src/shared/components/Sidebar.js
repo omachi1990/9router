@@ -45,6 +45,7 @@ export default function Sidebar({ onClose }) {
   const [showRemoteModal, setShowRemoteModal] = useState(false);
   const [isDisconnected, setIsDisconnected] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
+  const [versionInfo, setVersionInfo] = useState(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [shutdownCountdown, setShutdownCountdown] = useState(0);
@@ -60,11 +61,13 @@ export default function Sidebar({ onClose }) {
       .catch(() => {});
   }, []);
 
-  // Lazy check for new npm version on mount
   useEffect(() => {
     fetch("/api/version")
       .then(res => res.json())
-      .then(data => { if (data.hasUpdate) setUpdateInfo(data); })
+      .then(data => {
+        setVersionInfo(data);
+        if (data.hasUpdate) setUpdateInfo(data);
+      })
       .catch(() => {});
   }, []);
 
@@ -127,11 +130,30 @@ export default function Sidebar({ onClose }) {
               <h1 className="text-lg font-semibold tracking-tight text-text-main">
                 {APP_CONFIG.name}
               </h1>
-              <span className="text-xs text-text-muted">
-                v{APP_CONFIG.version}
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-text-muted">
+                  Fork v{APP_CONFIG.version}
+                </span>
+                {versionInfo?.upstreamVersion && (
+                  <span className={cn(
+                    "text-xs font-medium",
+                    versionInfo.upstreamBehind
+                      ? "text-amber-500"
+                      : "text-text-muted"
+                  )}>
+                    {versionInfo.upstreamBehind ? "↑ " : ""}Up v{versionInfo.upstreamVersion}
+                  </span>
+                )}
+              </div>
             </div>
           </Link>
+          {versionInfo?.upstreamBehind && (
+            <div className="flex flex-col gap-1 rounded p-1 -m-1 bg-amber-500/10 border border-amber-500/20">
+              <span className="text-xs text-amber-600 dark:text-amber-400">
+                Your fork is behind upstream ({versionInfo.upstreamVersion}). Run git merge to sync.
+              </span>
+            </div>
+          )}
           {updateInfo && (
             <div className="flex flex-col gap-1.5 rounded p-1 -m-1">
               <span className="text-xs font-semibold text-green-600 dark:text-amber-500">
