@@ -32,3 +32,11 @@ if (existsSync(sqlJsWasmDir) && !existsSync(join(standaloneSqlJsDir, "sql-wasm.w
   }
   console.log("[build] Copied sql.js wasm files to standalone");
 }
+
+const betterSqliteDir = join("node_modules", "better-sqlite3");
+const standaloneBetterSqliteDir = join(standaloneDir, betterSqliteDir);
+if (existsSync(betterSqliteDir) && existsSync(join(betterSqliteDir, "build"))) {
+  await mkdir(standaloneBetterSqliteDir, { recursive: true });
+  await cp(betterSqliteDir, standaloneBetterSqliteDir, { recursive: true, force: true });
+  console.log("[build] Copied better-sqlite3 to standalone");
+}
