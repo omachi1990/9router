@@ -1,7 +1,7 @@
 docker stop 9router
 docker rm 9router
 docker build -t 9router .
-docker run -d --name 9router -p 20128:20128 --env-file .env -e HOME=/home/node \
+docker run -d --name 9router -p 20128:20128 --env-file .env -e HOME=/home/node -e DATA_DIR=/app/data \
   -v 9router-data:/app/data \
   -v /root/.hermes:/home/node/.hermes \
   -v /root/.claude:/home/node/.claude \
