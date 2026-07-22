@@ -700,60 +700,79 @@ export default function ProviderDetailPage() {
     }
   };
 
-  const handleExportConnections = () => {
-    const exportData = connections.map((conn) => ({
-      name: conn.name,
-      displayName: conn.displayName,
-      email: conn.email,
-      authType: conn.authType,
-      apiKey: conn.apiKey,
-      accessToken: conn.accessToken,
-      refreshToken: conn.refreshToken,
-      idToken: conn.idToken,
-      priority: conn.priority,
-      globalPriority: conn.globalPriority,
-      defaultModel: conn.defaultModel,
-      providerSpecificData: conn.providerSpecificData,
-      proxyPoolId: conn.providerSpecificData?.proxyPoolId || null,
-      connectionProxyEnabled: conn.providerSpecificData?.connectionProxyEnabled,
-      connectionProxyUrl: conn.providerSpecificData?.connectionProxyUrl,
-      connectionNoProxy: conn.providerSpecificData?.connectionNoProxy,
-    }));
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${providerId}-accounts-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleExportConnections = async () => {
+    try {
+      const res = await fetch(`/api/providers?export=true`);
+      if (!res.ok) throw new Error("Failed to fetch connections for export");
+      const { connections: exportConnections } = await res.json();
+      
+      const filtered = exportConnections.filter(c => c.provider === providerId);
+      const exportData = filtered.map((conn) => ({
+        name: conn.name,
+        displayName: conn.displayName,
+        email: conn.email,
+        authType: conn.authType,
+        apiKey: conn.apiKey,
+        accessToken: conn.accessToken,
+        refreshToken: conn.refreshToken,
+        idToken: conn.idToken,
+        priority: conn.priority,
+        globalPriority: conn.globalPriority,
+        defaultModel: conn.defaultModel,
+        providerSpecificData: conn.providerSpecificData,
+        proxyPoolId: conn.providerSpecificData?.proxyPoolId || null,
+        connectionProxyEnabled: conn.providerSpecificData?.connectionProxyEnabled,
+        connectionProxyUrl: conn.providerSpecificData?.connectionProxyUrl,
+        connectionNoProxy: conn.providerSpecificData?.connectionNoProxy,
+      }));
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${providerId}-accounts-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to export connections: " + err.message);
+    }
   };
 
-  const handleExportConnection = (connection) => {
-    const exportData = {
-      name: connection.name,
-      displayName: connection.displayName,
-      email: connection.email,
-      authType: connection.authType,
-      apiKey: connection.apiKey,
-      accessToken: connection.accessToken,
-      refreshToken: connection.refreshToken,
-      idToken: connection.idToken,
-      priority: connection.priority,
-      globalPriority: connection.globalPriority,
-      defaultModel: connection.defaultModel,
-      providerSpecificData: connection.providerSpecificData,
-      proxyPoolId: connection.providerSpecificData?.proxyPoolId || null,
-      connectionProxyEnabled: connection.providerSpecificData?.connectionProxyEnabled,
-      connectionProxyUrl: connection.providerSpecificData?.connectionProxyUrl,
-      connectionNoProxy: connection.providerSpecificData?.connectionNoProxy,
-    };
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${connection.name || connection.id}-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleExportConnection = async (connection) => {
+    try {
+      const res = await fetch(`/api/providers/${connection.id}?export=true`);
+      if (!res.ok) throw new Error("Failed to fetch connection details");
+      const { connection: connData } = await res.json();
+
+      const exportData = {
+        name: connData.name,
+        displayName: connData.displayName,
+        email: connData.email,
+        authType: connData.authType,
+        apiKey: connData.apiKey,
+        accessToken: connData.accessToken,
+        refreshToken: connData.refreshToken,
+        idToken: connData.idToken,
+        priority: connData.priority,
+        globalPriority: connData.globalPriority,
+        defaultModel: connData.defaultModel,
+        providerSpecificData: connData.providerSpecificData,
+        proxyPoolId: connData.providerSpecificData?.proxyPoolId || null,
+        connectionProxyEnabled: connData.providerSpecificData?.connectionProxyEnabled,
+        connectionProxyUrl: connData.providerSpecificData?.connectionProxyUrl,
+        connectionNoProxy: connData.providerSpecificData?.connectionNoProxy,
+      };
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${connection.name || connection.id}-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to export connection: " + err.message);
+    }
   };
 
   const handleStopOneByOneTest = () => {

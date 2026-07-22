@@ -8,8 +8,19 @@ export const MITM_TOOLS = {
     description: "Google Antigravity IDE with MITM",
     configType: "mitm",
     mitmDomain: "daily-cloudcode-pa.googleapis.com",
-    modelAliases: ["gemini-3.5-flash-low", "gemini-3-flash-agent", "gemini-3.5-flash-extra-low", "gemini-3.1-pro-low", "gemini-pro-agent", "claude-sonnet-4-6", "claude-opus-4-6-thinking", "gpt-oss-120b-medium", "gemini-3-flash"],
+    modelAliases: [
+      "gemini-3.6-flash-agent", "gemini-3.6-flash",
+      "gemini-3.5-flash-lite-agent", "gemini-3.5-flash-lite",
+      "gemini-3.1-pro", "gemini-3.5-flash-low", "gemini-3-flash-agent",
+      "gemini-3.5-flash-extra-low", "gemini-3.1-pro-low", "gemini-pro-agent",
+      "claude-sonnet-4-6", "claude-opus-4-6-thinking", "gpt-oss-120b-medium", "gemini-3-flash"
+    ],
     defaultModels: [
+      { id: "gemini-3.6-flash-agent", name: "Gemini 3.6 Flash (High) / Agent", alias: "gemini-3.6-flash-agent" },
+      { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash", alias: "gemini-3.6-flash" },
+      { id: "gemini-3.5-flash-lite-agent", name: "Gemini 3.5 Flash-Lite (High) / Agent", alias: "gemini-3.5-flash-lite-agent" },
+      { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash-Lite", alias: "gemini-3.5-flash-lite" },
+      { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro", alias: "gemini-3.1-pro" },
       { id: "gemini-3.5-flash-low", name: "Gemini 3.5 Flash (Medium) / Default", alias: "gemini-3.5-flash-low" },
       { id: "gemini-3-flash-agent", name: "Gemini 3.5 Flash (High)", alias: "gemini-3-flash-agent" },
       { id: "gemini-3.5-flash-extra-low", name: "Gemini 3.5 Flash (Low)", alias: "gemini-3.5-flash-extra-low" },
@@ -395,6 +406,11 @@ amp --model "{{model}}"
       { type: "info", text: "Requests from Antigravity CLI will automatically be routed to the Antigravity provider by prefixing the model with 'antigravity/'." },
     ],
     defaultModels: [
+      { id: "antigravity/gemini-3.6-flash-agent", name: "Gemini 3.6 Flash (High) / Agent", alias: "gemini-3.6-flash-agent" },
+      { id: "antigravity/gemini-3.6-flash", name: "Gemini 3.6 Flash", alias: "gemini-3.6-flash" },
+      { id: "antigravity/gemini-3.5-flash-lite-agent", name: "Gemini 3.5 Flash-Lite (High) / Agent", alias: "gemini-3.5-flash-lite-agent" },
+      { id: "antigravity/gemini-3.5-flash-lite", name: "Gemini 3.5 Flash-Lite", alias: "gemini-3.5-flash-lite" },
+      { id: "antigravity/gemini-3.1-pro", name: "Gemini 3.1 Pro", alias: "gemini-3.1-pro" },
       { id: "antigravity/gemini-3-flash-agent", name: "Gemini 3.5 Flash (High)", alias: "gemini-3-flash-agent" },
       { id: "antigravity/gemini-pro-agent", name: "Gemini 3.1 Pro (High)", alias: "gemini-pro-agent" },
       { id: "antigravity/claude-sonnet-4-6", name: "Claude Sonnet 4.6 (Thinking)", alias: "claude-sonnet-4-6" },

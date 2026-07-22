@@ -47,8 +47,10 @@ async function normalizeProxyPoolId(proxyPoolId) {
 }
 
 // GET /api/providers - List all connections
-export async function GET() {
+export async function GET(request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const exportMode = searchParams.get("export") === "true";
     const connections = await getProviderConnections();
 
     // Build nodeNameMap for compatible providers (id → name)
@@ -66,14 +68,14 @@ export async function GET() {
       const name = isCompatible
         ? (c.name || nodeNameMap[c.provider] || c.providerSpecificData?.nodeName || c.provider)
         : c.name;
-      return {
-        ...c,
-        name,
-        apiKey: undefined,
-        accessToken: undefined,
-        refreshToken: undefined,
-        idToken: undefined,
-      };
+      const conn = { ...c, name };
+      if (!exportMode) {
+        delete conn.apiKey;
+        delete conn.accessToken;
+        delete conn.refreshToken;
+        delete conn.idToken;
+      }
+      return conn;
     });
 
     return NextResponse.json({ connections: safeConnections });

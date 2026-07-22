@@ -63,6 +63,8 @@ function shouldMergeProviderSpecificData(existing, incoming, hasLegacyProxy, has
 export async function GET(request, { params }) {
   try {
     const { id } = await params;
+    const { searchParams } = new URL(request.url);
+    const exportMode = searchParams.get("export") === "true";
     const connection = await getProviderConnectionById(id);
 
     if (!connection) {
@@ -71,10 +73,12 @@ export async function GET(request, { params }) {
 
     // Hide sensitive fields
     const result = { ...connection };
-    delete result.apiKey;
-    delete result.accessToken;
-    delete result.refreshToken;
-    delete result.idToken;
+    if (!exportMode) {
+      delete result.apiKey;
+      delete result.accessToken;
+      delete result.refreshToken;
+      delete result.idToken;
+    }
 
     return NextResponse.json({ connection: result });
   } catch (error) {
