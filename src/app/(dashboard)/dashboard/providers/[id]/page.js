@@ -24,6 +24,7 @@ import AddCustomModelModal from "./AddCustomModelModal";
 import ModelCheckModal from "./ModelCheckModal";
 import BulkImportCodexModal from "./BulkImportCodexModal";
 import ImportAccountsModal from "./ImportAccountsModal";
+import ExportAccountsModal from "./ExportAccountsModal";
 
 const ONE_BY_ONE_DELAY_MS = 1000;
 
@@ -51,6 +52,7 @@ export default function ProviderDetailPage() {
   const [addConnectionError, setAddConnectionError] = useState("");
   const [showBulkImportCodex, setShowBulkImportCodex] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [exportModalState, setExportModalState] = useState({ isOpen: false, jsonText: "", filename: "" });
   const [showEditModal, setShowEditModal] = useState(false);
   const [showEditNodeModal, setShowEditNodeModal] = useState(false);
   const [showBulkProxyModal, setShowBulkProxyModal] = useState(false);
@@ -725,13 +727,11 @@ export default function ProviderDetailPage() {
         connectionProxyUrl: conn.providerSpecificData?.connectionProxyUrl,
         connectionNoProxy: conn.providerSpecificData?.connectionNoProxy,
       }));
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${providerId}-accounts-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      setExportModalState({
+        isOpen: true,
+        jsonText: JSON.stringify(exportData, null, 2),
+        filename: `${providerId}-accounts-${new Date().toISOString().slice(0, 10)}.json`
+      });
     } catch (err) {
       console.error(err);
       alert("Failed to export connections: " + err.message);
@@ -762,13 +762,11 @@ export default function ProviderDetailPage() {
         connectionProxyUrl: connData.providerSpecificData?.connectionProxyUrl,
         connectionNoProxy: connData.providerSpecificData?.connectionNoProxy,
       };
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${connection.name || connection.id}-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      setExportModalState({
+        isOpen: true,
+        jsonText: JSON.stringify(exportData, null, 2),
+        filename: `${connection.name || connection.id}-${new Date().toISOString().slice(0, 10)}.json`
+      });
     } catch (err) {
       console.error(err);
       alert("Failed to export connection: " + err.message);
@@ -1883,6 +1881,15 @@ export default function ProviderDetailPage() {
           existingConnections={connections}
           onClose={() => setShowImportModal(false)}
           onSuccess={fetchConnections}
+        />
+      )}
+
+      {exportModalState.isOpen && (
+        <ExportAccountsModal
+          isOpen={exportModalState.isOpen}
+          jsonText={exportModalState.jsonText}
+          filename={exportModalState.filename}
+          onClose={() => setExportModalState({ isOpen: false, jsonText: "", filename: "" })}
         />
       )}
 
