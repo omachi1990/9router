@@ -92,10 +92,10 @@ const readEnvFile = async () => {
   }
 };
 
-// Detect 9router by base_url containing localhost/127.0.0.1 or matching tunnel URL
+// Detect 9router config: provider is "custom" and a base_url is set
 const has9RouterConfig = (modelCfg) => {
   if (!modelCfg?.base_url) return false;
-  return modelCfg.provider === "custom" && /localhost|127\.0\.0\.1|0\.0\.0\.0/.test(modelCfg.base_url);
+  return modelCfg.provider === "custom";
 };
 
 export async function GET() {
