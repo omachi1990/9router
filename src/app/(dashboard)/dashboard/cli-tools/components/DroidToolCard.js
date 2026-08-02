@@ -93,6 +93,8 @@ export default function DroidToolCard({
           setModelList([legacy.model]);
         }
       }
+      const cfg = droidStatus.settings?.customModels?.find(m => m.id?.startsWith("custom:9Router"));
+      if (cfg?.baseUrl) setCustomBaseUrl(cfg.baseUrl);
     }
   }, [droidStatus]);
 

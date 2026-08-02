@@ -128,6 +128,7 @@ export default function ClaudeToolCard({
           }
         }
       });
+      if (env.ANTHROPIC_BASE_URL) setCustomBaseUrl(env.ANTHROPIC_BASE_URL);
       // Only set selectedApiKey if it exists in apiKeys list
       const tokenFromFile = env.ANTHROPIC_AUTH_TOKEN;
       if (tokenFromFile && apiKeys?.some(k => k.key === tokenFromFile)) {

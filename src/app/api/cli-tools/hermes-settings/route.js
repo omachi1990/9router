@@ -19,6 +19,9 @@ const getHermesEnvPath = () => path.join(getHermesDir(), ".env");
 // Match top-level "model:" block (until next non-indented, non-empty line)
 const MODEL_BLOCK_RE = /^model:[ \t]*\r?\n((?:[ \t]+.*\r?\n?|[ \t]*\r?\n)*)/m;
 
+// Match url: line inside a providers.<name> block
+const PROVIDER_URL_RE = /^(\s{2}\w+:\s*\n(?:\s{4}.*\n)*?\s{4})url:[ \t]*["']?[^"'\r\n]+["']?/m;
+
 const buildModelBlock = (model, baseUrl) =>
   `model:\n  default: "${model}"\n  provider: "custom"\n  base_url: "${baseUrl}"\n`;
 
@@ -41,6 +44,11 @@ const parseModelBlock = (yaml) => {
 const upsertModelBlock = (yaml, newBlock) => {
   if (MODEL_BLOCK_RE.test(yaml)) return yaml.replace(MODEL_BLOCK_RE, newBlock);
   return yaml.length > 0 ? `${newBlock}\n${yaml}` : newBlock;
+};
+
+const updateProviderUrl = (yaml, providerName, baseUrl) => {
+  const re = new RegExp(`^(\\s{2}${providerName}:\\s*\\n(?:\\s{4}.*\\n)*?\\s{4})url:[ \\t]*["']?[^"'\\r\\n]+["']?`, "m");
+  return yaml.replace(re, `$1url: "${baseUrl}"`);
 };
 
 const removeModelBlock = (yaml) => yaml.replace(MODEL_BLOCK_RE, "").replace(/^\n+/, "");
@@ -92,10 +100,10 @@ const readEnvFile = async () => {
   }
 };
 
-// Detect 9router by base_url containing localhost/127.0.0.1 or matching tunnel URL
+// Detect 9router config: provider is "custom" and a base_url is set
 const has9RouterConfig = (modelCfg) => {
   if (!modelCfg?.base_url) return false;
-  return modelCfg.provider === "custom" && /localhost|127\.0\.0\.1|0\.0\.0\.0/.test(modelCfg.base_url);
+  return modelCfg.provider === "custom";
 };
 
 export async function GET() {
@@ -130,9 +138,11 @@ export async function POST(request) {
 
     const normalizedBaseUrl = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
 
-    // Update config.yaml — replace/insert model: block, keep everything else
-    const existingYaml = await readConfigYaml();
-    const newYaml = upsertModelBlock(existingYaml, buildModelBlock(model, normalizedBaseUrl));
+    // Update config.yaml — replace/insert model: block + provider URLs, keep everything else
+    let existingYaml = await readConfigYaml();
+    let newYaml = upsertModelBlock(existingYaml, buildModelBlock(model, normalizedBaseUrl));
+    newYaml = updateProviderUrl(newYaml, "9router", normalizedBaseUrl);
+    newYaml = updateProviderUrl(newYaml, "custom", normalizedBaseUrl);
     await fs.writeFile(getHermesConfigPath(), newYaml);
 
     // Update .env — upsert OPENAI_API_KEY only when caller provides one

@@ -81,19 +81,47 @@ export default function BaseUrlSelect({
     [requiresExternalUrl, tunnelEnabled, tunnelPublicUrl, tailscaleEnabled, tailscaleUrl, cloudEnabled, cloudUrl, savedPresets, withV1]
   );
 
-  // Always default to first option (127.0.0.1) on mount, ignore persisted value
+  // Sync mode & customInput from value prop (used both on init and on value change)
+  const syncFromValue = (val, opts) => {
+    if (!val) return;
+    const normalizedVal = val.replace(/\/+$/, "");
+    const match = opts.find((o) => {
+      const oUrl = (o.url || "").replace(/\/+$/, "");
+      return oUrl === normalizedVal;
+    });
+    if (match) {
+      setMode(match.value);
+      setCustomInput("");
+    } else {
+      setMode(CUSTOM_VALUE);
+      setCustomInput(val);
+    }
+  };
+
+  // Initialize from value prop so saved custom endpoints are preserved
   useEffect(() => {
     if (initializedRef.current) return;
     if (options.length === 0) return;
     initializedRef.current = true;
-    const first = options.find((o) => o.value !== CUSTOM_VALUE);
-    if (first) {
-      setMode(first.value);
-      onChange(first.url);
+    if (value) {
+      syncFromValue(value, options);
     } else {
-      setMode(CUSTOM_VALUE);
+      const first = options.find((o) => o.value !== CUSTOM_VALUE);
+      if (first) {
+        setMode(first.value);
+        onChange(first.url);
+      } else {
+        setMode(CUSTOM_VALUE);
+      }
     }
-  }, [options, onChange]);
+  }, []);
+
+  // Sync when value changes after init (e.g. status loaded from server)
+  useEffect(() => {
+    if (!initializedRef.current) return;
+    if (!value) return;
+    syncFromValue(value, options);
+  }, [value, options]);
 
   const handleSelect = (e) => {
     const next = e.target.value;

@@ -85,6 +85,7 @@ export default function JcodeToolCard({
         if (envApiKey && apiKeys?.some(k => k.key === envApiKey)) {
           setSelectedApiKey(envApiKey);
         }
+        if (provider.base_url) setCustomBaseUrl(provider.base_url);
       }
     }
   }, [jcodeStatus, apiKeys]);

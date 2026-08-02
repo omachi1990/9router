@@ -80,6 +80,7 @@ export default function HermesToolCard({
       hasInitializedModel.current = true;
       const cfg = hermesStatus.settings?.model;
       if (cfg?.default) setSelectedModel(cfg.default);
+      if (cfg?.base_url) setCustomBaseUrl(cfg.base_url);
     }
   }, [hermesStatus]);
 
