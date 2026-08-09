@@ -49,7 +49,7 @@ const has9RouterConfig = (auth) => {
   const entry = auth["openai-compatible"] || auth["9router"];
   if (!entry) return false;
   const baseUrl = entry.baseUrl || entry.baseURL || "";
-  return baseUrl.includes("localhost") || baseUrl.includes("127.0.0.1") || baseUrl.includes("9router");
+  return !!baseUrl && !baseUrl.includes("api.openai.com");
 };
 
 export async function GET() {

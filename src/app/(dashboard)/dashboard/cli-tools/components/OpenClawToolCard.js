@@ -83,6 +83,7 @@ export default function OpenClawToolCard({
         if (provider.apiKey && apiKeys?.some(k => k.key === provider.apiKey)) {
           setSelectedApiKey(provider.apiKey);
         }
+        if (provider.baseUrl) setCustomBaseUrl(provider.baseUrl);
       }
       // Init per-agent models from enriched agents list
       const agentList = openclawStatus.agents || [];
