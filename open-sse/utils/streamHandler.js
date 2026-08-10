@@ -99,6 +99,7 @@ export function createDisconnectAwareStream(transformStream, streamController, o
   const reader = transformStream.readable.getReader();
   const writer = transformStream.writable.getWriter();
   let terminalEmitted = false;
+  let pendingRead = null;
 
   // Emit a synthesized terminal payload (e.g. Responses response.failed + [DONE]) once
   const emitTerminal = (controller) => {
@@ -110,6 +111,8 @@ export function createDisconnectAwareStream(transformStream, streamController, o
     } catch { /* best-effort terminal */ }
   };
 
+  const pingBytes = new TextEncoder().encode(": ping\n\n");
+
   return new ReadableStream({
     async pull(controller) {
       if (!streamController.isConnected()) {
@@ -118,49 +121,75 @@ export function createDisconnectAwareStream(transformStream, streamController, o
         return;
       }
 
-      try {
-        const { done, value } = await reader.read();
+      let readDone = false;
+      while (!readDone) {
+        try {
+          if (!pendingRead) {
+            pendingRead = reader.read();
+          }
 
-        if (done) {
-          streamController.handleComplete();
-          controller.close();
+          let pingTimer;
+          const pingPromise = new Promise((resolve) => {
+            pingTimer = setTimeout(() => resolve({ isPing: true }), 5000);
+          });
+
+          const result = await Promise.race([pendingRead, pingPromise]);
+          clearTimeout(pingTimer);
+
+          if (result && result.isPing) {
+            if (streamController.isConnected()) {
+              controller.enqueue(pingBytes);
+            }
+            continue;
+          }
+
+          pendingRead = null;
+          readDone = true;
+          const { done, value } = result;
+
+          if (done) {
+            streamController.handleComplete();
+            controller.close();
+            return;
+          }
+          controller.enqueue(value);
+        } catch (error) {
+          pendingRead = null;
+          const wasConnected = streamController.isConnected();
+          // Controller already closed = downstream ended; not an upstream error, skip noisy log.
+          const msg0 = error?.message || "";
+          const isControllerClosed = msg0.includes("already closed") || msg0.includes("Invalid state");
+          if (!isControllerClosed) streamController.handleError(error);
+          reader.cancel().catch(() => {});
+          writer.abort().catch(() => {});
+
+          // Treat network resets / socket hang up / abort as graceful close
+          const msg = error?.message || "";
+          const code = error?.code || error?.cause?.code || "";
+          const isNetworkClose =
+            error.name === "AbortError" ||
+            msg.includes("aborted") ||
+            msg.includes("socket hang up") ||
+            msg.includes("ECONNRESET") ||
+            msg.includes("ETIMEDOUT") ||
+            msg.includes("EPIPE") ||
+            code === "ECONNRESET" ||
+            code === "ETIMEDOUT" ||
+            code === "EPIPE" ||
+            code === "UND_ERR_SOCKET";
+
+          // Graceful close on network/abort, or when a structured terminal is available
+          // (Responses passthrough prefers response.failed + [DONE] over a raw transport error)
+          try {
+            if (!wasConnected || isNetworkClose || onAbortTerminal) {
+              emitTerminal(controller);
+              controller.close();
+            } else {
+              controller.error(error);
+            }
+          } catch (e) { /* already closed or cancelled */ }
           return;
         }
-        controller.enqueue(value);
-      } catch (error) {
-        const wasConnected = streamController.isConnected();
-        // Controller already closed = downstream ended; not an upstream error, skip noisy log.
-        const msg0 = error?.message || "";
-        const isControllerClosed = msg0.includes("already closed") || msg0.includes("Invalid state");
-        if (!isControllerClosed) streamController.handleError(error);
-        reader.cancel().catch(() => {});
-        writer.abort().catch(() => {});
-
-        // Treat network resets / socket hang up / abort as graceful close
-        const msg = error?.message || "";
-        const code = error?.code || error?.cause?.code || "";
-        const isNetworkClose =
-          error.name === "AbortError" ||
-          msg.includes("aborted") ||
-          msg.includes("socket hang up") ||
-          msg.includes("ECONNRESET") ||
-          msg.includes("ETIMEDOUT") ||
-          msg.includes("EPIPE") ||
-          code === "ECONNRESET" ||
-          code === "ETIMEDOUT" ||
-          code === "EPIPE" ||
-          code === "UND_ERR_SOCKET";
-
-        // Graceful close on network/abort, or when a structured terminal is available
-        // (Responses passthrough prefers response.failed + [DONE] over a raw transport error)
-        try {
-          if (!wasConnected || isNetworkClose || onAbortTerminal) {
-            emitTerminal(controller);
-            controller.close();
-          } else {
-            controller.error(error);
-          }
-        } catch (e) { /* already closed or cancelled */ }
       }
     },
 
