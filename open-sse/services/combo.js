@@ -218,16 +218,23 @@ export function resetComboRotation(comboName) {
  * @returns {string[]|null} Array of models or null if not a combo
  */
 export function getComboModelsFromData(modelStr, combosData) {
-  // Don't check if it's in provider/model format
-  if (modelStr.includes("/")) return null;
-  
-  // Handle both array and object formats
+  if (!modelStr) return null;
   const combos = Array.isArray(combosData) ? combosData : (combosData?.combos || []);
-  
-  const combo = combos.find(c => c.name === modelStr);
+
+  let combo = combos.find(c => c.name === modelStr);
   if (combo && combo.models && combo.models.length > 0) {
     return combo.models;
   }
+
+  if (modelStr.includes("/")) {
+    const firstSlash = modelStr.indexOf("/");
+    const targetModel = modelStr.slice(firstSlash + 1);
+    combo = combos.find(c => c.name === targetModel);
+    if (combo && combo.models && combo.models.length > 0) {
+      return combo.models;
+    }
+  }
+
   return null;
 }
 
