@@ -24,6 +24,7 @@ function normalizeToArray(parsed) {
   if (Array.isArray(parsed)) return parsed;
   if (parsed && typeof parsed === "object") {
     if (Array.isArray(parsed.accounts)) return parsed.accounts;
+    if (Array.isArray(parsed.providerConnections)) return parsed.providerConnections;
     return [parsed];
   }
   return null;
