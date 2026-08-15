@@ -20,6 +20,15 @@ if (existsSync("public")) {
   await cp("public", join(standaloneDir, "public"), { recursive: true, force: true });
 }
 
+// Without it beside server.js the standalone build serves requests unsanitized.
+const serverWrapperSource = "custom-server.js";
+const serverWrapperDestination = join(standaloneDir, "custom-server.js");
+if (existsSync(serverWrapperSource)) {
+  const { cpSync } = await import("node:fs");
+  cpSync(serverWrapperSource, serverWrapperDestination, { force: true });
+  console.log(`[build] Copied custom-server.js to ${serverWrapperDestination}`);
+}
+
 const sqlJsWasmDir = join("node_modules", "sql.js", "dist");
 const standaloneSqlJsDir = join(standaloneDir, sqlJsWasmDir);
 if (existsSync(sqlJsWasmDir) && !existsSync(join(standaloneSqlJsDir, "sql-wasm.wasm"))) {
