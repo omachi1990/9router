@@ -538,9 +538,18 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
                 </a>
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(reloginState.authUrl);
-                    setCopiedLoginLink(true);
-                    setTimeout(() => setCopiedLoginLink(false), 2000);
+                    try {
+                      const textarea = document.createElement("textarea");
+                      textarea.value = reloginState.authUrl;
+                      textarea.style.position = "fixed";
+                      textarea.style.opacity = "0";
+                      document.body.appendChild(textarea);
+                      textarea.select();
+                      document.execCommand("copy");
+                      document.body.removeChild(textarea);
+                      setCopiedLoginLink(true);
+                      setTimeout(() => setCopiedLoginLink(false), 2000);
+                    } catch {}
                   }}
                   className="shrink-0 rounded p-1 text-text-muted hover:bg-black/5 hover:text-primary dark:hover:bg-white/5"
                   title="Copy link đăng nhập"
@@ -563,14 +572,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
               />
               <div className="flex gap-2 mt-1">
                 <button
-                  onClick={() => {
-                    // Sync local state to parent before exchange
-                    setReloginState(prev => ({
-                      ...prev,
-                      [connection.id]: { ...prev[connection.id], callbackUrl: localCallbackUrl }
-                    }));
-                    handleExchangeCallback(connection);
-                  }}
+                  onClick={() => handleExchangeCallback(connection, localCallbackUrl)}
                   disabled={!localCallbackUrl || reloginState.loading}
                   className="flex items-center gap-1 rounded bg-primary px-3 py-1.5 text-xs text-white hover:bg-primary/90 disabled:opacity-50"
                 >
@@ -587,7 +589,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
                   )}
                 </button>
                 <button
-                  onClick={() => onCancelRelogin(connection.id)}
+                  onClick={() => { setLocalCallbackUrl(""); onCancelRelogin(connection.id); }}
                   className="rounded px-3 py-1.5 text-xs text-text-muted hover:bg-black/5 dark:hover:bg-white/5"
                 >
                   Hủy

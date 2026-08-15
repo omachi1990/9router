@@ -873,25 +873,24 @@ export default function ProviderDetailPage() {
   };
 
   // Exchange callback URL for new tokens
-  const handleExchangeCallback = async (connection) => {
-    const state = reloginState[connection.id];
-    if (!state?.callbackUrl) return;
+  const handleExchangeCallback = async (connection, callbackUrl) => {
+    if (!callbackUrl) return;
 
     setReloginState(prev => ({ ...prev, [connection.id]: { ...prev[connection.id], loading: true, error: null } }));
     try {
-      const code = new URL(state.callbackUrl).searchParams.get("code") ||
-                   new URL(state.callbackUrl).searchParams.get("token") ||
-                   state.callbackUrl.split("code=")[1]?.split("&")[0] ||
-                   state.callbackUrl;
+      const code = new URL(callbackUrl).searchParams.get("code") ||
+                   new URL(callbackUrl).searchParams.get("token") ||
+                   callbackUrl.split("code=")[1]?.split("&")[0] ||
+                   callbackUrl;
 
       const res = await fetch(`/api/oauth/${connection.provider}/exchange`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           code: code.trim(),
-          state: state.state,
-          code_verifier: state.codeVerifier,
-          redirect_uri: state.redirectUri,
+          state: reloginState[connection.id]?.state,
+          code_verifier: reloginState[connection.id]?.codeVerifier,
+          redirect_uri: reloginState[connection.id]?.redirectUri,
           connectionId: connection.id,
         }),
       });
