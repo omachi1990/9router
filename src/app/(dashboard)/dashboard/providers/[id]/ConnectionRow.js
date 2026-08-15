@@ -218,6 +218,31 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
             <Badge variant="default" size="sm">
               {authLabel}
             </Badge>
+            {connection.providerSpecificData?.chatgptPlanType && (
+              <Badge variant={
+                connection.providerSpecificData.chatgptPlanType === "pro" ? "success" :
+                connection.providerSpecificData.chatgptPlanType === "plus" ? "primary" :
+                connection.providerSpecificData.chatgptPlanType === "team" ? "warning" :
+                "default"
+              } size="sm">
+                {connection.providerSpecificData.chatgptPlanType}
+              </Badge>
+            )}
+            {(() => {
+              const expiresAt = connection.expiresAt;
+              if (!expiresAt) return null;
+              const expiryDate = new Date(expiresAt);
+              const now = new Date();
+              const daysUntil = Math.ceil((expiryDate - now) / (1000 * 60 * 60 * 24));
+              if (daysUntil < 0) {
+                return <Badge variant="error" size="sm">Expired</Badge>;
+              } else if (daysUntil <= 7) {
+                return <Badge variant="warning" size="sm">{daysUntil}d left</Badge>;
+              } else if (daysUntil <= 30) {
+                return <Badge variant="default" size="sm">{daysUntil}d left</Badge>;
+              }
+              return null;
+            })()}
             {hasAnyProxy && (
               <Badge variant={proxyBadgeVariant} size="sm">
                 Proxy
@@ -410,6 +435,15 @@ ConnectionRow.propTypes = {
     lastError: PropTypes.string,
     priority: PropTypes.number,
     globalPriority: PropTypes.number,
+    expiresAt: PropTypes.string,
+    providerSpecificData: PropTypes.shape({
+      chatgptPlanType: PropTypes.string,
+      chatgptAccountId: PropTypes.string,
+      proxyPoolId: PropTypes.string,
+      connectionProxyEnabled: PropTypes.bool,
+      connectionProxyUrl: PropTypes.string,
+      connectionNoProxy: PropTypes.string,
+    }),
   }).isRequired,
   proxyPools: PropTypes.arrayOf(PropTypes.shape({
     id: PropTypes.string,
