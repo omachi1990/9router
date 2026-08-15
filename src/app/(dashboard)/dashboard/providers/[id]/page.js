@@ -1053,6 +1053,9 @@ export default function ProviderDetailPage() {
     if (connectionFilter === "need_login") {
       return conn.testStatus === "unavailable" || conn.lastError?.includes("auth") || conn.lastError?.includes("token");
     }
+    if (connectionFilter === "free") return conn.providerSpecificData?.chatgptPlanType === "free";
+    if (connectionFilter === "plus") return conn.providerSpecificData?.chatgptPlanType === "plus";
+    if (connectionFilter === "pro") return conn.providerSpecificData?.chatgptPlanType === "pro";
     return true;
   });
 
@@ -1064,6 +1067,9 @@ export default function ProviderDetailPage() {
     active: connections.filter(c => c.isActive !== false && c.testStatus !== "unavailable").length,
     inactive: connections.filter(c => c.isActive === false).length,
     need_login: connections.filter(c => c.testStatus === "unavailable" || c.lastError?.includes("auth") || c.lastError?.includes("token")).length,
+    free: connections.filter(c => c.providerSpecificData?.chatgptPlanType === "free").length,
+    plus: connections.filter(c => c.providerSpecificData?.chatgptPlanType === "plus").length,
+    pro: connections.filter(c => c.providerSpecificData?.chatgptPlanType === "pro").length,
   };
 
   const toggleSelectConnection = (connectionId) => {
@@ -1745,13 +1751,16 @@ export default function ProviderDetailPage() {
 
           {/* Connection Filter Tabs */}
           {connections.length > 0 && (
-            <div className="mt-3 flex items-center gap-1 border-b border-black/[0.03] pb-2 dark:border-white/[0.03]">
+            <div className="mt-3 flex flex-wrap items-center gap-1 border-b border-black/[0.03] pb-2 dark:border-white/[0.03]">
               {[
                 { key: "all", label: "Tất cả", icon: "list" },
                 { key: "active", label: "Đang hoạt động", icon: "check_circle" },
                 { key: "inactive", label: "Đã lưu trữ", icon: "archive" },
                 { key: "need_login", label: "Cần đăng nhập lại", icon: "warning" },
-              ].map(({ key, label, icon }) => (
+                { key: "free", label: "Free", icon: "person", color: "text-gray-500" },
+                { key: "plus", label: "Plus", icon: "star", color: "text-blue-500" },
+                { key: "pro", label: "Pro", icon: "workspace_premium", color: "text-green-500" },
+              ].map(({ key, label, icon, color }) => (
                 <button
                   key={key}
                   onClick={() => setConnectionFilter(key)}
@@ -1761,7 +1770,7 @@ export default function ProviderDetailPage() {
                       : "text-text-muted hover:bg-black/5 hover:text-text-main dark:hover:bg-white/5"
                   }`}
                 >
-                  <span className="material-symbols-outlined text-[14px]">{icon}</span>
+                  <span className={`material-symbols-outlined text-[14px] ${color || ""}`}>{icon}</span>
                   <span>{label}</span>
                   <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] ${
                     connectionFilter === key ? "bg-primary/20" : "bg-black/5 dark:bg-white/5"

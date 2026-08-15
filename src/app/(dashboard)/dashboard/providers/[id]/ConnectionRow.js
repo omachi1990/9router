@@ -16,6 +16,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
   const [quota, setQuota] = useState(null);
   const [loadingQuota, setLoadingQuota] = useState(false);
   const [quotaError, setQuotaError] = useState(null);
+  const [copiedLoginLink, setCopiedLoginLink] = useState(false);
 
   const isEligibleForQuota = isOAuth || (connection.authType === "oauth") || USAGE_APIKEY_PROVIDERS.includes(connection.provider);
 
@@ -223,6 +224,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
                 connection.providerSpecificData.chatgptPlanType === "pro" ? "success" :
                 connection.providerSpecificData.chatgptPlanType === "plus" ? "primary" :
                 connection.providerSpecificData.chatgptPlanType === "team" ? "warning" :
+                connection.providerSpecificData.chatgptPlanType === "free" ? "default" :
                 "default"
               } size="sm">
                 {connection.providerSpecificData.chatgptPlanType}
@@ -469,14 +471,29 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
                 <span className="material-symbols-outlined text-[14px] text-amber-500">link</span>
                 <span className="text-text-muted">Bước 1: Click link bên dưới để đăng nhập</span>
               </div>
-              <a
-                href={reloginState.authUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-primary hover:underline break-all"
-              >
-                {reloginState.authUrl.substring(0, 80)}...
-              </a>
+              <div className="flex items-center gap-2">
+                <a
+                  href={reloginState.authUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary hover:underline break-all flex-1"
+                >
+                  {reloginState.authUrl.substring(0, 80)}...
+                </a>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(reloginState.authUrl);
+                    setCopiedLoginLink(true);
+                    setTimeout(() => setCopiedLoginLink(false), 2000);
+                  }}
+                  className="shrink-0 rounded p-1 text-text-muted hover:bg-black/5 hover:text-primary dark:hover:bg-white/5"
+                  title="Copy link đăng nhập"
+                >
+                  <span className="material-symbols-outlined text-[14px]">
+                    {copiedLoginLink ? "check" : "content_copy"}
+                  </span>
+                </button>
+              </div>
               <div className="flex items-center gap-2 text-xs mt-1">
                 <span className="material-symbols-outlined text-[14px] text-amber-500">content_paste</span>
                 <span className="text-text-muted">Bước 2: Copy URL callback từ trình duyệt và paste vào dưới</span>
