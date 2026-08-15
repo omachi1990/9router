@@ -17,6 +17,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
   const [loadingQuota, setLoadingQuota] = useState(false);
   const [quotaError, setQuotaError] = useState(null);
   const [copiedLoginLink, setCopiedLoginLink] = useState(false);
+  const [localCallbackUrl, setLocalCallbackUrl] = useState("");
 
   const isEligibleForQuota = isOAuth || (connection.authType === "oauth") || USAGE_APIKEY_PROVIDERS.includes(connection.provider);
 
@@ -555,26 +556,22 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
               </div>
               <input
                 type="text"
-                value={reloginState.callbackUrl || ""}
-                onChange={(e) => setReloginState(prev => ({
-                  ...prev,
-                  [connection.id]: { ...prev[connection.id], callbackUrl: e.target.value }
-                }))}
-                onPaste={(e) => {
-                  const text = e.clipboardData.getData("text");
-                  setReloginState(prev => ({
-                    ...prev,
-                    [connection.id]: { ...prev[connection.id], callbackUrl: text }
-                  }));
-                }}
+                value={localCallbackUrl}
+                onChange={(e) => setLocalCallbackUrl(e.target.value)}
                 placeholder="Paste URL callback vào đây..."
                 className="w-full rounded border border-amber-500/30 bg-background px-2 py-1.5 text-xs focus:outline-none focus:border-primary"
-                autoFocus
               />
               <div className="flex gap-2 mt-1">
                 <button
-                  onClick={() => handleExchangeCallback(connection)}
-                  disabled={!reloginState.callbackUrl || reloginState.loading}
+                  onClick={() => {
+                    // Sync local state to parent before exchange
+                    setReloginState(prev => ({
+                      ...prev,
+                      [connection.id]: { ...prev[connection.id], callbackUrl: localCallbackUrl }
+                    }));
+                    handleExchangeCallback(connection);
+                  }}
+                  disabled={!localCallbackUrl || reloginState.loading}
                   className="flex items-center gap-1 rounded bg-primary px-3 py-1.5 text-xs text-white hover:bg-primary/90 disabled:opacity-50"
                 >
                   {reloginState.loading ? (
