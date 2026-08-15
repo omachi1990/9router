@@ -520,7 +520,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
               <button onClick={() => onCancelRelogin(connection.id)} className="underline hover:text-red-600 ml-1">Đóng</button>
             </div>
           )}
-          {reloginState.authUrl && !reloginState.callbackUrl && (
+          {reloginState.authUrl && (
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2 text-xs">
                 <span className="material-symbols-outlined text-[14px] text-amber-500">link</span>
@@ -560,8 +560,16 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
                   ...prev,
                   [connection.id]: { ...prev[connection.id], callbackUrl: e.target.value }
                 }))}
+                onPaste={(e) => {
+                  const text = e.clipboardData.getData("text");
+                  setReloginState(prev => ({
+                    ...prev,
+                    [connection.id]: { ...prev[connection.id], callbackUrl: text }
+                  }));
+                }}
                 placeholder="Paste URL callback vào đây..."
                 className="w-full rounded border border-amber-500/30 bg-background px-2 py-1.5 text-xs focus:outline-none focus:border-primary"
+                autoFocus
               />
               <div className="flex gap-2 mt-1">
                 <button
