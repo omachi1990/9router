@@ -282,22 +282,41 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
                   <span className="text-red-500">{failedModels.length} Fail</span>
                 )}
               </div>
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-col gap-1">
                 {modelResults.map((m) => (
-                  <span
-                    key={m.modelId}
-                    className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] ${
-                      m.ok
-                        ? "bg-green-500/10 text-green-600 dark:text-green-400"
-                        : "bg-red-500/10 text-red-500"
-                    }`}
-                    title={m.error || (m.ok ? "OK" : "Failed")}
-                  >
-                    <span className="material-symbols-outlined text-[10px]">
-                      {m.ok ? "check_circle" : "cancel"}
+                  <div key={m.modelId} className="flex items-center gap-1.5 flex-wrap">
+                    <span
+                      className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] ${
+                        m.ok
+                          ? "bg-green-500/10 text-green-600 dark:text-green-400"
+                          : "bg-red-500/10 text-red-500"
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[10px]">
+                        {m.ok ? "check_circle" : "cancel"}
+                      </span>
+                      {m.modelId}
                     </span>
-                    {m.modelId}
-                  </span>
+                    {m.requiredPlan && (
+                      <span className={`inline-flex items-center rounded px-1 py-0.5 text-[9px] font-medium ${
+                        m.requiredPlan === "pro" ? "bg-purple-500/10 text-purple-600 dark:text-purple-400" :
+                        m.requiredPlan === "plus" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" :
+                        "bg-gray-500/10 text-gray-500"
+                      }`}>
+                        {m.requiredPlan}
+                      </span>
+                    )}
+                    {!m.requiredPlan && (
+                      <span className="inline-flex items-center rounded bg-green-500/10 px-1 py-0.5 text-[9px] font-medium text-green-600 dark:text-green-400">
+                        free
+                      </span>
+                    )}
+                    {m.error && (
+                      <span className="text-[10px] text-red-500 break-all" title={m.error}>
+                        {m.error}
+                      </span>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
