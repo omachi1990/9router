@@ -81,6 +81,17 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
     const availableConnections = connections.filter(c => {
       if (excludeSet.has(c.id)) return false;
       if (isModelLockActive(c, model)) return false;
+      // Filter by plan type: skip accounts whose plan doesn't support this model
+      if (model) {
+        const requiredPlan = getModelRequiredPlan(provider, model);
+        if (requiredPlan) {
+          const accountPlan = c.providerSpecificData?.chatgptPlanType;
+          if (accountPlan && accountPlan !== requiredPlan) {
+            log.debug("AUTH", `  → ${c.id?.slice(0, 8)} | skipped: model ${model} requires ${requiredPlan}, account is ${accountPlan}`);
+            return false;
+          }
+        }
+      }
       return true;
     });
 

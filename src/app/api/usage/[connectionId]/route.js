@@ -183,6 +183,28 @@ export async function GET(request, { params }) {
       }
     }
 
+    // Auto-disable account when quota is exhausted (session and weekly both at 100%)
+    if (usage?.quotas) {
+      const quotas = usage.quotas;
+      const allQuotas = Object.values(quotas).filter(q => q && typeof q === "object");
+      const hasQuotas = allQuotas.length > 0;
+      const allExhausted = hasQuotas && allQuotas.every(q => {
+        const used = typeof q.used === "number" ? q.used : (typeof q.percent_used === "number" ? q.percent_used : 0);
+        return used >= 100;
+      });
+      
+      if (allExhausted && connection.isActive) {
+        console.log(`[Usage] Auto-disabling ${connection.provider} account ${connection.email || connection.id} - quota exhausted`);
+        await updateProviderConnection(connection.id, {
+          isActive: false,
+          lastError: "Auto-disabled: quota exhausted",
+          lastErrorAt: new Date().toISOString(),
+        });
+        usage.autoDisabled = true;
+        usage.autoDisabledMessage = "Account auto-disabled: quota exhausted (session and weekly limits reached 100%)";
+      }
+    }
+
     return Response.json(usage);
   } catch (error) {
     const provider = connection?.provider ?? "unknown";
