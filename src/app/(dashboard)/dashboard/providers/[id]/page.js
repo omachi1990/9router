@@ -658,23 +658,50 @@ export default function ProviderDetailPage() {
         }));
 
         try {
-          const res = await fetch(`/api/providers/${connection.id}/test`, { method: "POST" });
-          const data = await res.json();
-          const valid = !!data.valid;
+          // Test connection first
+          const testRes = await fetch(`/api/providers/${connection.id}/test`, { method: "POST" });
+          const testData = await testRes.json();
+          const valid = !!testData.valid;
 
-          if (valid) {
-            passed += 1;
-          } else {
+          if (!valid) {
             failed += 1;
-          }
+            setOneByOneResults((prev) => ({
+              ...prev,
+              [connection.id]: {
+                state: "failed",
+                error: testData.error || "Connection failed",
+                models: [],
+              },
+            }));
+          } else {
+            // Connection is valid, now test models
+            const modelRes = await fetch(`/api/providers/${connection.id}/test-models-for-connection`, { method: "POST" });
+            const modelData = await modelRes.json();
 
-          setOneByOneResults((prev) => ({
-            ...prev,
-            [connection.id]: {
-              state: valid ? "success" : "failed",
-              error: valid ? null : (data.error || null),
-            },
-          }));
+            const modelResults = (modelData.results || []).map(r => ({
+              modelId: r.modelId,
+              name: r.name,
+              ok: r.ok,
+              error: r.error,
+              requiredPlan: r.requiredPlan,
+            }));
+
+            const workingModels = modelResults.filter(m => m.ok).map(m => m.modelId);
+            const failedModels = modelResults.filter(m => !m.ok).map(m => m.modelId);
+
+            passed += 1;
+            setOneByOneResults((prev) => ({
+              ...prev,
+              [connection.id]: {
+                state: "success",
+                error: null,
+                models: modelResults,
+                workingModels,
+                failedModels,
+                planType: modelData.planType,
+              },
+            }));
+          }
         } catch (error) {
           failed += 1;
           setOneByOneResults((prev) => ({
@@ -682,6 +709,7 @@ export default function ProviderDetailPage() {
             [connection.id]: {
               state: "failed",
               error: error.message || "Test failed",
+              models: [],
             },
           }));
         }

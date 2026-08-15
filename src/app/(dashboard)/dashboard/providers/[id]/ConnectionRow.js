@@ -184,6 +184,11 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
     return null;
   };
 
+  // Model results from test
+  const modelResults = oneByOneStatus?.models || [];
+  const workingModels = oneByOneStatus?.workingModels || [];
+  const failedModels = oneByOneStatus?.failedModels || [];
+
   return (
     <div className={`group flex min-w-0 flex-col gap-3 rounded-lg p-2 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02] sm:flex-row sm:items-center sm:justify-between ${connection.isActive === false ? "opacity-60" : ""}`}>
       <div className="flex min-w-0 flex-1 items-start gap-2 sm:items-center sm:gap-3">
@@ -266,6 +271,37 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
               </Badge>
             )}
           </div>
+
+          {/* Model Test Results */}
+          {modelResults.length > 0 && (
+            <div className="mt-2 flex flex-col gap-1 border-t border-black/[0.03] dark:border-white/[0.03] pt-2">
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className="text-text-muted">Model test:</span>
+                <span className="text-green-500">{workingModels.length} OK</span>
+                {failedModels.length > 0 && (
+                  <span className="text-red-500">{failedModels.length} Fail</span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {modelResults.map((m) => (
+                  <span
+                    key={m.modelId}
+                    className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] ${
+                      m.ok
+                        ? "bg-green-500/10 text-green-600 dark:text-green-400"
+                        : "bg-red-500/10 text-red-500"
+                    }`}
+                    title={m.error || (m.ok ? "OK" : "Failed")}
+                  >
+                    <span className="material-symbols-outlined text-[10px]">
+                      {m.ok ? "check_circle" : "cancel"}
+                    </span>
+                    {m.modelId}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
           {hasAnyProxy && (
             <div className="mt-1 flex items-center gap-2 flex-wrap">
               <span className="max-w-full truncate text-[11px] text-text-muted sm:max-w-[420px]" title={proxyDisplayText}>
