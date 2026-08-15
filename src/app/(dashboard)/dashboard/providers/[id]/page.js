@@ -25,6 +25,7 @@ import ModelCheckModal from "./ModelCheckModal";
 import BulkImportCodexModal from "./BulkImportCodexModal";
 import ImportAccountsModal from "./ImportAccountsModal";
 import ExportAccountsModal from "./ExportAccountsModal";
+import ProviderQuotaSummary from "./ProviderQuotaSummary";
 
 const ONE_BY_ONE_DELAY_MS = 1000;
 
@@ -1613,6 +1614,11 @@ export default function ProviderDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Provider Quota Summary */}
+          {connections.length > 0 && (
+            <ProviderQuotaSummary connections={connections} />
+          )}
 
           {connections.length === 0 ? (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
