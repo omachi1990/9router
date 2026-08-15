@@ -774,6 +774,30 @@ export default function ProviderDetailPage() {
     }
   };
 
+  const handleExportCockpit = async (connection) => {
+    try {
+      const res = await fetch(`/api/providers/${connection.id}?export=true`);
+      if (!res.ok) throw new Error("Failed to fetch connection details");
+      const { connection: connData } = await res.json();
+
+      const cockpitData = {
+        tokens: {
+          id_token: connData.idToken || "",
+          access_token: connData.accessToken || "",
+          refresh_token: connData.refreshToken || "",
+        }
+      };
+      setExportModalState({
+        isOpen: true,
+        jsonText: JSON.stringify(cockpitData, null, 2),
+        filename: `cockpit-${connection.name || connection.id}-${new Date().toISOString().slice(0, 10)}.json`
+      });
+    } catch (err) {
+      console.error(err);
+      alert("Failed to export cockpit tokens: " + err.message);
+    }
+  };
+
   const handleStopOneByOneTest = () => {
     if (!oneByOneRunning) return;
     stopOneByOneRef.current = true;
@@ -1064,6 +1088,7 @@ export default function ProviderDetailPage() {
                   }
                 }}
                 onExport={() => handleExportConnection(conn)}
+                onExportCockpit={() => handleExportCockpit(conn)}
                 onEdit={() => {
                   setSelectedConnection(conn);
                   setShowEditModal(true);

@@ -7,7 +7,7 @@ import { Badge, Toggle, Tooltip } from "@/shared/components";
 import { USAGE_APIKEY_PROVIDERS } from "@/shared/constants/providers";
 import CooldownTimer from "./CooldownTimer";
 
-export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMoveUp, onMoveDown, onToggleActive, onUpdateProxy, onExport, onEdit, onDelete, oneByOneStatus = null, autoPing = null }) {
+export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMoveUp, onMoveDown, onToggleActive, onUpdateProxy, onExport, onExportCockpit, onEdit, onDelete, oneByOneStatus = null, autoPing = null }) {
   const [showProxyDropdown, setShowProxyDropdown] = useState(false);
   const [updatingProxy, setUpdatingProxy] = useState(false);
   const proxyDropdownRef = useRef(null);
@@ -235,11 +235,11 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
               const now = new Date();
               const daysUntil = Math.ceil((expiryDate - now) / (1000 * 60 * 60 * 24));
               if (daysUntil < 0) {
-                return <Badge variant="error" size="sm">Expired</Badge>;
+                return <Badge variant="error" size="sm">Hết hạn</Badge>;
               } else if (daysUntil <= 7) {
-                return <Badge variant="warning" size="sm">{daysUntil}d left</Badge>;
+                return <Badge variant="warning" size="sm">còn {daysUntil}ngày</Badge>;
               } else if (daysUntil <= 30) {
-                return <Badge variant="default" size="sm">{daysUntil}d left</Badge>;
+                return <Badge variant="default" size="sm">còn {daysUntil}ngày</Badge>;
               }
               return null;
             })()}
@@ -288,13 +288,13 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
               {loadingQuota ? (
                 <div className="flex items-center gap-1.5 text-text-muted">
                   <span className="material-symbols-outlined text-[14px] animate-spin">sync</span>
-                  <span>Loading quota...</span>
+                  <span>Đang tải quota...</span>
                 </div>
               ) : quotaError ? (
                 <div className="flex items-center gap-1.5 text-red-500">
                   <span className="material-symbols-outlined text-[14px]">error</span>
-                  <span>Failed to load quota: {quotaError}</span>
-                  <button onClick={fetchQuota} className="text-[10px] underline hover:text-red-600 ml-1">Retry</button>
+                  <span>Lỗi tải quota: {quotaError}</span>
+                  <button onClick={fetchQuota} className="text-[10px] underline hover:text-red-600 ml-1">Thử lại</button>
                 </div>
               ) : quota ? (
                 <div className="flex flex-col gap-1.5">
@@ -327,13 +327,13 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
                           const diffDays = Math.floor(diffHours / 24);
                           const remainHours = diffHours % 24;
                           let timeLeft = "";
-                          if (diffDays > 0) timeLeft = `${diffDays}d ${remainHours}h`;
+                          if (diffDays > 0) timeLeft = `${diffDays}ngày ${remainHours}h`;
                           else if (diffHours > 0) timeLeft = `${diffHours}h`;
-                          else timeLeft = "now";
+                          else timeLeft = "ngay bây giờ";
                           const isExpired = diffMs <= 0;
                           return (
                             <span className={`text-[10px] truncate ${isExpired ? "text-green-500 font-medium" : "text-text-muted"}`} title={resetDate.toLocaleString()}>
-                              {isExpired ? "Ready" : `${timeLeft} left`}
+                              {isExpired ? "Sẵn sàng" : `còn ${timeLeft}`}
                             </span>
                           );
                         })()}
@@ -345,10 +345,10 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
                     <button 
                       onClick={fetchQuota} 
                       className="flex items-center gap-0.5 text-[10px] text-text-muted hover:text-primary transition-colors"
-                      title="Refresh Quota"
+                      title="Làm mới quota"
                     >
                       <span className="material-symbols-outlined text-[12px]">sync</span>
-                      <span>Refresh quota</span>
+                      <span>Làm mới quota</span>
                     </button>
                   </div>
                 </div>
@@ -416,6 +416,10 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
             <span className="material-symbols-outlined text-[18px]">file_download</span>
             <span className="text-[10px] leading-tight">Export</span>
           </button>
+          <button onClick={onExportCockpit} className="flex flex-col items-center rounded px-2 py-1 text-text-muted hover:bg-black/5 hover:text-amber-500 dark:hover:bg-white/5">
+            <span className="material-symbols-outlined text-[18px]">token</span>
+            <span className="text-[10px] leading-tight">Cockpit</span>
+          </button>
           <button onClick={onEdit} className="flex flex-col items-center rounded px-2 py-1 text-text-muted hover:bg-black/5 hover:text-primary dark:hover:bg-white/5">
             <span className="material-symbols-outlined text-[18px]">edit</span>
             <span className="text-[10px] leading-tight">Edit</span>
@@ -473,6 +477,7 @@ ConnectionRow.propTypes = {
   onToggleActive: PropTypes.func.isRequired,
   onUpdateProxy: PropTypes.func,
   onExport: PropTypes.func,
+  onExportCockpit: PropTypes.func,
   onEdit: PropTypes.func.isRequired,
   onDelete: PropTypes.func.isRequired,
   oneByOneStatus: PropTypes.shape({
