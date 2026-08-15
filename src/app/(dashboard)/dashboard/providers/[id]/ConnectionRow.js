@@ -319,11 +319,24 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
                             {q.used}/{q.total}{q.unit || ""}
                           </span>
                         </div>
-                        {q.resetAt && (
-                          <span className="text-[10px] text-text-muted truncate" title={new Date(q.resetAt).toLocaleString()}>
-                            Resets: {new Date(q.resetAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        )}
+                        {q.resetAt && (() => {
+                          const resetDate = new Date(q.resetAt);
+                          const now = new Date();
+                          const diffMs = resetDate - now;
+                          const diffHours = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60)));
+                          const diffDays = Math.floor(diffHours / 24);
+                          const remainHours = diffHours % 24;
+                          let timeLeft = "";
+                          if (diffDays > 0) timeLeft = `${diffDays}d ${remainHours}h`;
+                          else if (diffHours > 0) timeLeft = `${diffHours}h`;
+                          else timeLeft = "now";
+                          const isExpired = diffMs <= 0;
+                          return (
+                            <span className={`text-[10px] truncate ${isExpired ? "text-green-500 font-medium" : "text-text-muted"}`} title={resetDate.toLocaleString()}>
+                              {isExpired ? "Ready" : `${timeLeft} left`}
+                            </span>
+                          );
+                        })()}
                       </div>
                     );
                   })}
