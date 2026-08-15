@@ -1044,7 +1044,6 @@ export default function ProviderDetailPage() {
   };
 
   const selectedConnections = connections.filter((conn) => selectedConnectionIds.includes(conn.id));
-  const allSelected = filteredConnections.length > 0 && filteredConnections.every(conn => selectedConnectionIds.includes(conn.id));
 
   // Filter connections by status
   const filteredConnections = connections.filter((conn) => {
@@ -1056,6 +1055,8 @@ export default function ProviderDetailPage() {
     }
     return true;
   });
+
+  const allSelected = filteredConnections.length > 0 && filteredConnections.every(conn => selectedConnectionIds.includes(conn.id));
 
   // Count connections by status
   const connectionCounts = {
