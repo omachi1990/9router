@@ -7,7 +7,7 @@ import { Badge, Toggle, Tooltip } from "@/shared/components";
 import { USAGE_APIKEY_PROVIDERS } from "@/shared/constants/providers";
 import CooldownTimer from "./CooldownTimer";
 
-export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMoveUp, onMoveDown, onToggleActive, onUpdateProxy, onExport, onExportCockpit, onEdit, onDelete, oneByOneStatus = null, autoPing = null }) {
+export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMoveUp, onMoveDown, onToggleActive, onUpdateProxy, onExport, onExportCockpit, onEdit, onDelete, oneByOneStatus = null, autoPing = null, reloginState = null, onGetLoginLink, onExchangeCallback, onCancelRelogin }) {
   const [showProxyDropdown, setShowProxyDropdown] = useState(false);
   const [updatingProxy, setUpdatingProxy] = useState(false);
   const proxyDropdownRef = useRef(null);
@@ -428,6 +428,16 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
             <span className="material-symbols-outlined text-[18px]">delete</span>
             <span className="text-[10px] leading-tight">Delete</span>
           </button>
+          {onGetLoginLink && (
+            <button
+              onClick={() => onGetLoginLink(connection)}
+              disabled={reloginState?.loading}
+              className="flex flex-col items-center rounded px-2 py-1 text-text-muted hover:bg-black/5 hover:text-amber-500 dark:hover:bg-white/5 disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-[18px]">login</span>
+              <span className="text-[10px] leading-tight">Login</span>
+            </button>
+          )}
         </div>
         <Toggle
           size="sm"
@@ -436,6 +446,80 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
           title={(connection.isActive ?? true) ? "Disable connection" : "Enable connection"}
         />
       </div>
+
+      {/* Re-login Panel */}
+      {reloginState && (
+        <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+          {reloginState.loading && !reloginState.authUrl && (
+            <div className="flex items-center gap-2 text-xs text-text-muted">
+              <span className="material-symbols-outlined text-[14px] animate-spin">sync</span>
+              <span>Đang lấy link đăng nhập...</span>
+            </div>
+          )}
+          {reloginState.error && (
+            <div className="flex items-center gap-2 text-xs text-red-500">
+              <span className="material-symbols-outlined text-[14px]">error</span>
+              <span>{reloginState.error}</span>
+              <button onClick={() => onCancelRelogin(connection.id)} className="underline hover:text-red-600 ml-1">Đóng</button>
+            </div>
+          )}
+          {reloginState.authUrl && !reloginState.callbackUrl && (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="material-symbols-outlined text-[14px] text-amber-500">link</span>
+                <span className="text-text-muted">Bước 1: Click link bên dưới để đăng nhập</span>
+              </div>
+              <a
+                href={reloginState.authUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary hover:underline break-all"
+              >
+                {reloginState.authUrl.substring(0, 80)}...
+              </a>
+              <div className="flex items-center gap-2 text-xs mt-1">
+                <span className="material-symbols-outlined text-[14px] text-amber-500">content_paste</span>
+                <span className="text-text-muted">Bước 2: Copy URL callback từ trình duyệt và paste vào dưới</span>
+              </div>
+              <input
+                type="text"
+                value={reloginState.callbackUrl || ""}
+                onChange={(e) => setReloginState(prev => ({
+                  ...prev,
+                  [connection.id]: { ...prev[connection.id], callbackUrl: e.target.value }
+                }))}
+                placeholder="Paste URL callback vào đây..."
+                className="w-full rounded border border-amber-500/30 bg-background px-2 py-1.5 text-xs focus:outline-none focus:border-primary"
+              />
+              <div className="flex gap-2 mt-1">
+                <button
+                  onClick={() => handleExchangeCallback(connection)}
+                  disabled={!reloginState.callbackUrl || reloginState.loading}
+                  className="flex items-center gap-1 rounded bg-primary px-3 py-1.5 text-xs text-white hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {reloginState.loading ? (
+                    <>
+                      <span className="material-symbols-outlined text-[12px] animate-spin">sync</span>
+                      <span>Đang xử lý...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-[12px]">check</span>
+                      <span>Xác nhận</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => onCancelRelogin(connection.id)}
+                  className="rounded px-3 py-1.5 text-xs text-text-muted hover:bg-black/5 dark:hover:bg-white/5"
+                >
+                  Hủy
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -480,6 +564,15 @@ ConnectionRow.propTypes = {
   onExportCockpit: PropTypes.func,
   onEdit: PropTypes.func.isRequired,
   onDelete: PropTypes.func.isRequired,
+  reloginState: PropTypes.shape({
+    loading: PropTypes.bool,
+    error: PropTypes.string,
+    authUrl: PropTypes.string,
+    callbackUrl: PropTypes.string,
+  }),
+  onGetLoginLink: PropTypes.func,
+  onExchangeCallback: PropTypes.func,
+  onCancelRelogin: PropTypes.func,
   oneByOneStatus: PropTypes.shape({
     state: PropTypes.string,
     error: PropTypes.string,

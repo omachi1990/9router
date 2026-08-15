@@ -1,21 +1,28 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import PropTypes from "prop-types";
 
 export default function ProviderQuotaSummary({ connections }) {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
+  const lastFetchKey = useRef(null);
 
-  const eligibleConnections = connections.filter(
-    (c) => c.isActive !== false && (c.authType === "oauth" || c.id)
-  );
+  const eligibleConnections = useMemo(() => {
+    return connections.filter(
+      (c) => c.isActive !== false && c.authType === "oauth"
+    );
+  }, [connections]);
 
   const fetchAllQuotas = useCallback(async () => {
     if (eligibleConnections.length === 0) {
       setSummary(null);
       return;
     }
+
+    const fetchKey = eligibleConnections.map(c => c.id).sort().join(",");
+    if (lastFetchKey.current === fetchKey) return;
+    lastFetchKey.current = fetchKey;
 
     setLoading(true);
     try {

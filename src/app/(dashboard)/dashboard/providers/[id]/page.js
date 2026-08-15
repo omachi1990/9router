@@ -87,6 +87,8 @@ export default function ProviderDetailPage() {
   const stopOneByOneRef = useRef(false);
   const [importingQoderModels, setImportingQoderModels] = useState(false);
   const { copied, copy } = useCopyToClipboard();
+  const [connectionFilter, setConnectionFilter] = useState("all"); // all | active | inactive | need_login
+  const [reloginState, setReloginState] = useState({}); // { [connectionId]: { authUrl, callbackUrl, loading, error } }
 
   const AG_RISK_STORAGE_KEY = "ag_risk_confirmed";
 
@@ -799,6 +801,103 @@ export default function ProviderDetailPage() {
     }
   };
 
+  // Get OAuth login link for re-login
+  const handleGetLoginLink = async (connection) => {
+    setReloginState(prev => ({ ...prev, [connection.id]: { loading: true, error: null } }));
+    try {
+      const provider = connection.provider;
+      const appPort = window.location.port || (window.location.protocol === "https:" ? "443" : "80");
+      let redirectUri;
+      if (provider === "codex") {
+        redirectUri = "http://localhost:1455/auth/callback";
+      } else if (provider === "xai") {
+        redirectUri = "http://127.0.0.1:56121/callback";
+      } else {
+        redirectUri = `http://localhost:${appPort}/callback`;
+      }
+
+      const authorizeUrl = new URL(`/api/oauth/${provider}/authorize`, window.location.origin);
+      authorizeUrl.searchParams.set("redirect_uri", redirectUri);
+
+      const res = await fetch(authorizeUrl.toString());
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      // Store state and codeVerifier for later exchange
+      setReloginState(prev => ({
+        ...prev,
+        [connection.id]: {
+          loading: false,
+          error: null,
+          authUrl: data.authUrl,
+          state: data.state,
+          codeVerifier: data.codeVerifier,
+          redirectUri,
+          callbackUrl: "",
+        }
+      }));
+    } catch (err) {
+      setReloginState(prev => ({
+        ...prev,
+        [connection.id]: { loading: false, error: err.message }
+      }));
+    }
+  };
+
+  // Exchange callback URL for new tokens
+  const handleExchangeCallback = async (connection) => {
+    const state = reloginState[connection.id];
+    if (!state?.callbackUrl) return;
+
+    setReloginState(prev => ({ ...prev, [connection.id]: { ...prev[connection.id], loading: true, error: null } }));
+    try {
+      const code = new URL(state.callbackUrl).searchParams.get("code") ||
+                   new URL(state.callbackUrl).searchParams.get("token") ||
+                   state.callbackUrl.split("code=")[1]?.split("&")[0] ||
+                   state.callbackUrl;
+
+      const res = await fetch(`/api/oauth/${connection.provider}/exchange`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: code.trim(),
+          state: state.state,
+          code_verifier: state.codeVerifier,
+          redirect_uri: state.redirectUri,
+          connectionId: connection.id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      // Update connection in local state
+      setConnections(prev => prev.map(c =>
+        c.id === connection.id
+          ? { ...c, ...data, testStatus: "active", lastError: null }
+          : c
+      ));
+      setReloginState(prev => {
+        const next = { ...prev };
+        delete next[connection.id];
+        return next;
+      });
+    } catch (err) {
+      setReloginState(prev => ({
+        ...prev,
+        [connection.id]: { ...prev[connection.id], loading: false, error: err.message }
+      }));
+    }
+  };
+
+  // Cancel re-login
+  const handleCancelRelogin = (connectionId) => {
+    setReloginState(prev => {
+      const next = { ...prev };
+      delete next[connectionId];
+      return next;
+    });
+  };
+
   const handleStopOneByOneTest = () => {
     if (!oneByOneRunning) return;
     stopOneByOneRef.current = true;
@@ -945,7 +1044,26 @@ export default function ProviderDetailPage() {
   };
 
   const selectedConnections = connections.filter((conn) => selectedConnectionIds.includes(conn.id));
-  const allSelected = connections.length > 0 && selectedConnectionIds.length === connections.length;
+  const allSelected = filteredConnections.length > 0 && filteredConnections.every(conn => selectedConnectionIds.includes(conn.id));
+
+  // Filter connections by status
+  const filteredConnections = connections.filter((conn) => {
+    if (connectionFilter === "all") return true;
+    if (connectionFilter === "active") return conn.isActive !== false && conn.testStatus !== "unavailable";
+    if (connectionFilter === "inactive") return conn.isActive === false;
+    if (connectionFilter === "need_login") {
+      return conn.testStatus === "unavailable" || conn.lastError?.includes("auth") || conn.lastError?.includes("token");
+    }
+    return true;
+  });
+
+  // Count connections by status
+  const connectionCounts = {
+    all: connections.length,
+    active: connections.filter(c => c.isActive !== false && c.testStatus !== "unavailable").length,
+    inactive: connections.filter(c => c.isActive === false).length,
+    need_login: connections.filter(c => c.testStatus === "unavailable" || c.lastError?.includes("auth") || c.lastError?.includes("token")).length,
+  };
 
   const toggleSelectConnection = (connectionId) => {
     setSelectedConnectionIds((prev) => (
@@ -960,7 +1078,7 @@ export default function ProviderDetailPage() {
       setSelectedConnectionIds([]);
       return;
     }
-    setSelectedConnectionIds(connections.map((conn) => conn.id));
+    setSelectedConnectionIds(filteredConnections.map((conn) => conn.id));
   };
 
   const clearSelection = () => {
@@ -1044,7 +1162,7 @@ export default function ProviderDetailPage() {
 
   const connectionsList = (
     <div className="flex min-w-0 flex-col divide-y divide-black/[0.03] dark:divide-white/[0.03]">
-      {connections
+      {filteredConnections
         .map((conn, index) => (
           <div key={conn.id} className="flex min-w-0 items-stretch">
             <div className="flex shrink-0 items-center pl-1 sm:pl-2">
@@ -1061,7 +1179,7 @@ export default function ProviderDetailPage() {
                 proxyPools={proxyPools}
                 isOAuth={isOAuth}
                 isFirst={index === 0}
-                isLast={index === connections.length - 1}
+                isLast={index === filteredConnections.length - 1}
                 onMoveUp={() => handleSwapPriority(index, index - 1)}
                 onMoveDown={() => handleSwapPriority(index, index + 1)}
                 onToggleActive={(isActive) => handleUpdateConnectionStatus(conn.id, isActive)}
@@ -1096,6 +1214,10 @@ export default function ProviderDetailPage() {
                 }}
                 onDelete={() => handleDelete(conn.id)}
                 oneByOneStatus={oneByOneResults[conn.id] || null}
+                reloginState={reloginState[conn.id] || null}
+                onGetLoginLink={handleGetLoginLink}
+                onExchangeCallback={handleExchangeCallback}
+                onCancelRelogin={handleCancelRelogin}
               />
             </div>
           </div>
@@ -1618,6 +1740,36 @@ export default function ProviderDetailPage() {
           {/* Provider Quota Summary */}
           {connections.length > 0 && (
             <ProviderQuotaSummary connections={connections} />
+          )}
+
+          {/* Connection Filter Tabs */}
+          {connections.length > 0 && (
+            <div className="mt-3 flex items-center gap-1 border-b border-black/[0.03] pb-2 dark:border-white/[0.03]">
+              {[
+                { key: "all", label: "Tất cả", icon: "list" },
+                { key: "active", label: "Đang hoạt động", icon: "check_circle" },
+                { key: "inactive", label: "Đã lưu trữ", icon: "archive" },
+                { key: "need_login", label: "Cần đăng nhập lại", icon: "warning" },
+              ].map(({ key, label, icon }) => (
+                <button
+                  key={key}
+                  onClick={() => setConnectionFilter(key)}
+                  className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                    connectionFilter === key
+                      ? "bg-primary/10 text-primary"
+                      : "text-text-muted hover:bg-black/5 hover:text-text-main dark:hover:bg-white/5"
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[14px]">{icon}</span>
+                  <span>{label}</span>
+                  <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] ${
+                    connectionFilter === key ? "bg-primary/20" : "bg-black/5 dark:bg-white/5"
+                  }`}>
+                    {connectionCounts[key]}
+                  </span>
+                </button>
+              ))}
+            </div>
           )}
 
           {connections.length === 0 ? (
