@@ -889,8 +889,8 @@ export default function ProviderDetailPage() {
         body: JSON.stringify({
           code: code.trim(),
           state: reloginState[connection.id]?.state,
-          code_verifier: reloginState[connection.id]?.codeVerifier,
-          redirect_uri: reloginState[connection.id]?.redirectUri,
+          codeVerifier: reloginState[connection.id]?.codeVerifier,
+          redirectUri: reloginState[connection.id]?.redirectUri,
           connectionId: connection.id,
         }),
       });
