@@ -351,7 +351,34 @@ export async function POST(request, { params }) {
       // Exchange code for tokens (meta carries provider-specific params, e.g. gitlab clientId/baseUrl)
       const tokenData = await exchangeTokens(provider, code, redirectUri, codeVerifier, state, meta);
 
-      // Save to database
+      // If connectionId provided, update existing connection; otherwise create new
+      const { connectionId } = body;
+      if (connectionId) {
+        const { getProviderConnectionById, updateProviderConnection } = await import("@/lib/localDb");
+        const existing = await getProviderConnectionById(connectionId);
+        if (existing) {
+          const updateData = {
+            ...tokenData,
+            expiresAt: tokenData.expiresIn
+              ? new Date(Date.now() + tokenData.expiresIn * 1000).toISOString()
+              : null,
+            testStatus: "active",
+            lastError: null,
+          };
+          await updateProviderConnection(connectionId, updateData);
+          return NextResponse.json({
+            success: true,
+            connection: {
+              id: connectionId,
+              provider: existing.provider,
+              email: tokenData.email || existing.email,
+              displayName: tokenData.displayName || existing.displayName,
+            }
+          });
+        }
+      }
+
+      // No connectionId or connection not found — create new
       const connection = await createProviderConnection({
         provider,
         authType: "oauth",
