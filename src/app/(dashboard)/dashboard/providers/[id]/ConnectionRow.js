@@ -572,7 +572,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
               />
               <div className="flex gap-2 mt-1">
                 <button
-                  onClick={() => handleExchangeCallback(connection, localCallbackUrl)}
+                  onClick={() => onExchangeCallback(connection, localCallbackUrl)}
                   disabled={!localCallbackUrl || reloginState.loading}
                   className="flex items-center gap-1 rounded bg-primary px-3 py-1.5 text-xs text-white hover:bg-primary/90 disabled:opacity-50"
                 >
