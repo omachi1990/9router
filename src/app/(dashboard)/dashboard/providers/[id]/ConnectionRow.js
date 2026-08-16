@@ -236,6 +236,11 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
                 {connection.providerSpecificData.chatgptPlanType}
               </Badge>
             )}
+            {connection.providerSpecificData?.quotaExhausted && (
+              <Badge variant="warning" size="sm">
+                Hết quota (chỉ free)
+              </Badge>
+            )}
             {(() => {
               const expiresAt = connection.expiresAt;
               if (!expiresAt) return null;

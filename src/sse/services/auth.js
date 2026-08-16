@@ -90,6 +90,14 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
             log.debug("AUTH", `  → ${c.id?.slice(0, 8)} | skipped: model ${model} requires ${requiredPlan}, account is ${accountPlan}`);
             return false;
           }
+          // If account quota is exhausted, skip paid models (only free allowed)
+          if (c.providerSpecificData?.quotaExhausted && requiredPlan !== "free") {
+            log.debug("AUTH", `  → ${c.id?.slice(0, 8)} | skipped: quota exhausted, model ${model} requires ${requiredPlan}`);
+            return false;
+          }
+        } else {
+          // requiredPlan is null/undefined = free model, but check if it's explicitly marked as paid
+          // If quota exhausted, still allow models with no requiredPlan (free)
         }
       }
       return true;

@@ -183,7 +183,8 @@ export async function GET(request, { params }) {
       }
     }
 
-    // Auto-disable account when quota is exhausted (session and weekly both at 100%)
+    // Mark account as quota-exhausted when session and weekly limits are both at 100%
+    // Instead of disabling the account entirely, mark it so free models can still be used
     if (usage?.quotas) {
       const quotas = usage.quotas;
       const allQuotas = Object.values(quotas).filter(q => q && typeof q === "object");
@@ -193,15 +194,30 @@ export async function GET(request, { params }) {
         return used >= 100;
       });
       
-      if (allExhausted && connection.isActive) {
-        console.log(`[Usage] Auto-disabling ${connection.provider} account ${connection.email || connection.id} - quota exhausted`);
-        await updateProviderConnection(connection.id, {
-          isActive: false,
-          lastError: "Auto-disabled: quota exhausted",
-          lastErrorAt: new Date().toISOString(),
-        });
-        usage.autoDisabled = true;
-        usage.autoDisabledMessage = "Account auto-disabled: quota exhausted (session and weekly limits reached 100%)";
+      if (allExhausted) {
+        // Mark quota exhausted but keep account active (free models still usable)
+        if (!connection.providerSpecificData?.quotaExhausted) {
+          console.log(`[Usage] Marking ${connection.provider} account ${connection.email || connection.id} as quota exhausted - free models still available`);
+          await updateProviderConnection(connection.id, {
+            providerSpecificData: {
+              ...(connection.providerSpecificData || {}),
+              quotaExhausted: true,
+              quotaExhaustedAt: new Date().toISOString(),
+            },
+          });
+        }
+        usage.quotaExhausted = true;
+        usage.quotaExhaustedMessage = "Quota exhausted - only free models available";
+      } else {
+        // Quota recovered - clear the flag
+        if (connection.providerSpecificData?.quotaExhausted) {
+          console.log(`[Usage] Quota recovered for ${connection.provider} account ${connection.email || connection.id}`);
+          const { quotaExhausted, quotaExhaustedAt, ...rest } = connection.providerSpecificData || {};
+          await updateProviderConnection(connection.id, {
+            providerSpecificData: rest,
+          });
+        }
+        usage.quotaExhausted = false;
       }
     }
 
