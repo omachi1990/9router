@@ -13,11 +13,14 @@ import { getMiniMaxUsage } from "./usage/minimax.js";
 import { getCodeBuddyCnUsage } from "./usage/codebuddy-cn.js";
 import { getGrokCliUsage } from "./usage/grok-cli.js";
 import { getOpenCodeGoUsage } from "./usage/opencode-go.js";
+import { getKimiUsage } from "./usage/kimi.js";
+import { getDeepseekUsage } from "./usage/deepseek.js";
+import { getZedUsage } from "./usage/zed.js";
+import { resolveQoderCredentials } from "./qoderModels.js";
+import { getGlmUsage } from "./usage/glm.js";
 import {
-  getQwenUsage,
   getIflowUsage,
   getOllamaUsage,
-  getGlmUsage,
   getVercelAiGatewayUsage,
   getQoderUsage,
 } from "./usage/misc.js";
@@ -36,7 +39,6 @@ const USAGE_HANDLERS = {
   codex: (c) => getCodexUsage(c.accessToken, c.proxyOptions),
   kiro: (c) => getKiroUsage(c.accessToken, c.providerSpecificData, c.proxyOptions),
   qoder: (c) => getQoderUsage(c.accessToken, c.proxyOptions),
-  qwen: (c) => getQwenUsage(c.accessToken, c.providerSpecificData),
   iflow: (c) => getIflowUsage(c.accessToken),
   ollama: (c) => getOllamaUsage(c.accessToken),
   glm: (c) => getGlmUsage(c.apiKey, c.provider, c.proxyOptions),
@@ -47,6 +49,9 @@ const USAGE_HANDLERS = {
   "codebuddy-cn": (c) => getCodeBuddyCnUsage(c.accessToken, c.apiKey, c.providerSpecificData, c.proxyOptions),
   "grok-cli": (c) => getGrokCliUsage(c.accessToken, c.providerSpecificData, c.proxyOptions),
   "opencode-go": (c) => getOpenCodeGoUsage(c.id),
+  kimi: (c) => getKimiUsage(c.accessToken, c.apiKey, c.proxyOptions, c.providerSpecificData),
+  deepseek: (c) => getDeepseekUsage(c.apiKey, c.proxyOptions),
+  zed: (c) => getZedUsage(c.accessToken, c.providerSpecificData, c.proxyOptions),
 };
 
 export async function getUsageForProvider(connection, proxyOptions = null, options = {}) {

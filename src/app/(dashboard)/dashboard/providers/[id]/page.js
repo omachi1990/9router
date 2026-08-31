@@ -26,6 +26,7 @@ import BulkImportCodexModal from "./BulkImportCodexModal";
 import ImportAccountsModal from "./ImportAccountsModal";
 import ExportAccountsModal from "./ExportAccountsModal";
 import ProviderQuotaSummary from "./ProviderQuotaSummary";
+import BulkImportGrokCliModal from "./BulkImportGrokCliModal";
 
 const ONE_BY_ONE_DELAY_MS = 1000;
 
@@ -54,6 +55,7 @@ export default function ProviderDetailPage() {
   const [showBulkImportCodex, setShowBulkImportCodex] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [exportModalState, setExportModalState] = useState({ isOpen: false, jsonText: "", filename: "" });
+  const [showBulkImportGrokCli, setShowBulkImportGrokCli] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showEditNodeModal, setShowEditNodeModal] = useState(false);
   const [showBulkProxyModal, setShowBulkProxyModal] = useState(false);
@@ -1846,6 +1848,11 @@ export default function ProviderDetailPage() {
                         {translate("Bulk Add")}
                       </Button>
                     )}
+                    {providerId === "grok-cli" && (
+                      <Button size="sm" icon="playlist_add" variant="secondary" onClick={() => setShowBulkImportGrokCli(true)}>
+                        {translate("Bulk Add")}
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       icon="add"
@@ -1910,6 +1917,18 @@ export default function ProviderDetailPage() {
                       variant="secondary"
                       onClick={() => setShowBulkImportCodex(true)}
                       title={translate("Bulk import codex accounts from JSON")}
+                      className="w-full sm:w-auto"
+                    >
+                      {translate("Bulk Add")}
+                    </Button>
+                  )}
+                  {providerId === "grok-cli" && (
+                    <Button
+                      size="sm"
+                      icon="playlist_add"
+                      variant="secondary"
+                      onClick={() => setShowBulkImportGrokCli(true)}
+                      title={translate("Bulk import Grok CLI accounts from JSON")}
                       className="w-full sm:w-auto"
                     >
                       {translate("Bulk Add")}
@@ -2105,6 +2124,14 @@ export default function ProviderDetailPage() {
         />
       )}
 
+      {providerId === "grok-cli" && (
+        <BulkImportGrokCliModal
+          isOpen={showBulkImportGrokCli}
+          onClose={() => setShowBulkImportGrokCli(false)}
+          onSuccess={fetchConnections}
+        />
+      )}
+
       {exportModalState.isOpen && (
         <ExportAccountsModal
           isOpen={exportModalState.isOpen}
@@ -2113,7 +2140,6 @@ export default function ProviderDetailPage() {
           onClose={() => setExportModalState({ isOpen: false, jsonText: "", filename: "" })}
         />
       )}
-
       {/* AG Risk Confirmation Modal */}
       <ConfirmModal
         isOpen={showAgRiskModal}
