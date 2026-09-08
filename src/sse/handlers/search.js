@@ -176,7 +176,6 @@ async function handleSingleProviderSearch(body, providerInput, request, apiKey, 
         log.info("AUTH", `\x1b[32m${providerId} reusing ${fallbackProviderId} credentials\x1b[0m`);
       }
     }
->>>>>>> upstream/master
 
     if (!credentials || credentials.allRateLimited) {
       if (credentials?.allRateLimited) {
