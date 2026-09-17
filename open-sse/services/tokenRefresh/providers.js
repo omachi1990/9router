@@ -304,7 +304,7 @@ export async function refreshCodexToken(refreshToken, log) {
       let providerSpecificData = null;
       if (tokens.id_token) {
         try {
-          const { extractCodexAccountInfo } = await import("../../src/lib/oauth/providerHelpers.js");
+          const { extractCodexAccountInfo } = await import("../../../src/lib/oauth/providerHelpers.js");
           const info = extractCodexAccountInfo(tokens.id_token);
           if (info.chatgptPlanType || info.chatgptAccountId) {
             providerSpecificData = {
