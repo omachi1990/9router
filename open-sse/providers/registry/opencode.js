@@ -24,6 +24,11 @@ export default {
     // /chat/completions, so the format is declared per-model, not per-provider.
     { id: "muse-spark-1.2-contributor-free", name: "Muse Spark 1.2 Contributor Free", targetFormat: "openai-responses" },
     { id: "muse-spark-1.3-contributor-free", name: "Muse Spark 1.3 Contributor Free", targetFormat: "openai-responses" },
+    { id: "mimo-v2.5-free", name: "MIMO v2.5 Free", targetFormat: "openai" },
+    { id: "ling-3.0-flash-fin-free", name: "Ling 3.0 Flash Fin Free", targetFormat: "openai" },
+    { id: "nemotron-3-ultra-free", name: "Nemotron 3 Ultra Free", targetFormat: "openai" },
+    { id: "nemotron-3.5-lightning-free", name: "Nemotron 3.5 Lightning Free", targetFormat: "openai" },
+    { id: "deepseek-v4-flash-free", name: "DeepSeek V4 Flash Free", targetFormat: "openai" },
   ],
   modelsFetcher: { url: "https://opencode.ai/zen/v1/models", type: "opencode-free" },
   passthroughModels: true,
