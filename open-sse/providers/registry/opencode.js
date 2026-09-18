@@ -29,7 +29,7 @@ export default {
     { id: "nemotron-3-ultra-free", name: "Nemotron 3 Ultra Free", targetFormat: "openai" },
     { id: "nemotron-3.5-lightning-free", name: "Nemotron 3.5 Lightning Free", targetFormat: "openai" },
     { id: "big-pickle", name: "Big Pickle", targetFormat: "openai" },
-    { id: "union-alpha", name: "Union Alpha", targetFormat: "openai" },
+    { id: "union-alpha", name: "Union Alpha Free", targetFormat: "claude" },
   ],
   modelsFetcher: { url: "https://opencode.ai/zen/v1/models", type: "opencode-free" },
   passthroughModels: true,
