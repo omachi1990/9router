@@ -141,9 +141,17 @@ export function createDisconnectAwareStream(transformStream, streamController, o
           clearTimeout(pingTimer);
 
           if (result && result.isPing) {
-            if (streamController.isConnected()) {
-              controller.enqueue(pingBytes);
+            if (!streamController.isConnected()) {
+              pendingRead = null;
+              reader.cancel().catch(() => {});
+              writer.abort().catch(() => {});
+              try {
+                emitTerminal(controller);
+                controller.close();
+              } catch { /* already closed or cancelled */ }
+              return;
             }
+            controller.enqueue(pingBytes);
             continue;
           }
 

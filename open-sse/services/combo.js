@@ -323,9 +323,18 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
         log.info("COMBO", `Model ${modelStr} succeeded`);
         comboPath.push({ model: modelStr, status: "success", latency: attemptLatency, accountName });
         
-        // Attach comboPath to response if possible for logging
-        if (result instanceof Response) return result;
-        return response;
+        // Attach comboPath to response in memory for requestDetail logging
+        if (result instanceof Response) {
+          result.comboPath = comboPath;
+          return result;
+        }
+        if (response instanceof Response) {
+          response.comboPath = comboPath;
+        }
+        if (result && typeof result === "object") {
+          result.comboPath = comboPath;
+        }
+        return response || result;
       }
 
       // Extract error info from response
@@ -359,7 +368,19 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
 
       if (!shouldFallback) {
         log.warn("COMBO", `Model ${modelStr} failed (no fallback)`, { status: statusCode });
-        const finalErrorResponse = new Response(JSON.stringify({ error: { message: errorText, type: "combo_error", comboPath } }), { status: statusCode, headers: { "Content-Type": "application/json" } });
+        if (result instanceof Response) {
+          result.comboPath = comboPath;
+          return result;
+        }
+        if (response instanceof Response) {
+          response.comboPath = comboPath;
+          return response;
+        }
+        const finalErrorResponse = new Response(
+          JSON.stringify({ error: { message: errorText } }),
+          { status: statusCode, headers: { "Content-Type": "application/json" } }
+        );
+        finalErrorResponse.comboPath = comboPath;
         return finalErrorResponse;
       }
 
@@ -388,14 +409,28 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
   }
 
   // All models failed
-  const finalErrorMessage = lastError || "All combo models unavailable";
-  const finalStatusCode = lastStatus || 500;
+  // Use 503 (Service Unavailable) rather than 406 (Not Acceptable) — 406 implies
+  // the request itself is invalid, but here the providers are simply unavailable
+  // or have no active credentials. 503 is more accurate and retryable by clients.
+  const allDisabled = lastError && lastError.toLowerCase().includes("no credentials");
+  const status = allDisabled ? 503 : (lastStatus || 503);
+  const msg = lastError || "All combo models unavailable";
 
-  const errorResponse = new Response(JSON.stringify({ error: { message: finalErrorMessage, type: "combo_error", comboPath } }), { status: finalStatusCode, headers: { "Content-Type": "application/json" } });
   if (earliestRetryAfter) {
-    errorResponse.headers.set("Retry-After", new Date(earliestRetryAfter).toUTCString());
+    const retryHuman = formatRetryAfter(earliestRetryAfter);
+    log.warn("COMBO", `All models failed | ${msg} (${retryHuman})`);
+    const resp = unavailableResponse(status, msg, earliestRetryAfter, retryHuman);
+    resp.comboPath = comboPath;
+    return resp;
   }
-  return errorResponse;
+
+  log.warn("COMBO", `All models failed | ${msg}`);
+  const resp = new Response(
+    JSON.stringify({ error: { message: msg } }),
+    { status, headers: { "Content-Type": "application/json" } }
+  );
+  resp.comboPath = comboPath;
+  return resp;
 }
 
 /**

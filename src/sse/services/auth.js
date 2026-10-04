@@ -12,6 +12,14 @@ let selectionMutex = Promise.resolve();
 
 const GITHUB_MONTHLY_USAGE_LIMIT = "you've reached your additional usage limit for your plan";
 
+const PLAN_LEVEL = {
+  free: 1,
+  plus: 2,
+  team: 3,
+  pro: 4,
+  enterprise: 5,
+};
+
 function githubMonthlyResetMs(status, errorText, provider) {
   if (resolveProviderId(provider) !== "github" || Number(status) !== 402) return null;
   if (!String(errorText || "").toLowerCase().includes(GITHUB_MONTHLY_USAGE_LIMIT)) return null;
@@ -92,9 +100,13 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
         const requiredPlan = getModelRequiredPlan(provider, model);
         if (requiredPlan) {
           const accountPlan = c.providerSpecificData?.chatgptPlanType;
-          if (accountPlan && accountPlan !== requiredPlan) {
-            log.debug("AUTH", `  → ${c.id?.slice(0, 8)} | skipped: model ${model} requires ${requiredPlan}, account is ${accountPlan}`);
-            return false;
+          if (accountPlan) {
+            const reqLevel = PLAN_LEVEL[requiredPlan.toLowerCase()] || 0;
+            const accLevel = PLAN_LEVEL[accountPlan.toLowerCase()] || 0;
+            if (reqLevel > 0 && accLevel > 0 ? accLevel < reqLevel : accountPlan.toLowerCase() !== requiredPlan.toLowerCase()) {
+              log.debug("AUTH", `  → ${c.id?.slice(0, 8)} | skipped: model ${model} requires ${requiredPlan}, account is ${accountPlan}`);
+              return false;
+            }
           }
           // If account quota is exhausted, skip paid models (only free allowed)
           if (c.providerSpecificData?.quotaExhausted && requiredPlan !== "free") {
@@ -128,15 +140,7 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       }
     });
 
-    let connection = null;
-    if (preferredConnectionId) {
-      connection = connections.find((c) => c.id === preferredConnectionId);
-      if (connection) {
-        log.info("AUTH", `${provider} | pinned to preferred connection ${connection.id?.slice(0, 8)} (${connection.name || connection.email || "unnamed"})`);
-      }
-    }
-
-    if (!connection && availableConnections.length === 0) {
+    if (availableConnections.length === 0) {
       // Find earliest persistent lock or lazy Antigravity quota-cache reset for retry timing.
       const lockedConns = connections.filter(c => isModelLockActive(c, model));
       const expiries = lockedConns.map(c => getEarliestModelLockUntil(c)).filter(Boolean);
@@ -162,13 +166,23 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       return null;
     }
 
-    if (!connection) {
-      const settings = await getSettings();
-      // Per-provider strategy overrides global setting
-      const providerOverride = (settings.providerStrategies || {})[providerId] || {};
-      const strategy = providerOverride.fallbackStrategy || settings.fallbackStrategy || "fill-first";
+    const settings = await getSettings();
+    // Per-provider strategy overrides global setting
+    const providerOverride = (settings.providerStrategies || {})[providerId] || {};
+    const strategy = providerOverride.fallbackStrategy || settings.fallbackStrategy || "fill-first";
 
-      if (strategy === "round-robin") {
+    let connection;
+    // Pin to preferred connection if specified and available
+    if (preferredConnectionId) {
+      connection = availableConnections.find((c) => c.id === preferredConnectionId);
+      if (connection) {
+        log.info("AUTH", `${provider} | pinned to preferred connection ${connection.id?.slice(0, 8)} (${connection.name || connection.email || "unnamed"})`);
+      }
+    }
+
+    if (connection) {
+      // skip strategy
+    } else if (strategy === "round-robin") {
       const stickyLimit = providerOverride.stickyRoundRobinLimit || settings.stickyRoundRobinLimit || 3;
 
       // Sort by lastUsed (most recent first) to find current candidate
@@ -210,7 +224,6 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
     } else {
       // Default: fill-first (already sorted by priority in getProviderConnections)
       connection = availableConnections[0];
-    }
     }
 
     const resolvedProxy = await resolveConnectionProxyConfig(connection.providerSpecificData || {});
