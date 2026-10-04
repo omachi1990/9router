@@ -57,6 +57,7 @@ export default function BaseUrlSelect({
   const [mode, setMode] = useState("");
   const [customInput, setCustomInput] = useState("");
   const initializedRef = useRef(false);
+  const currentUrlRef = useRef("");
   const customInputRef = useRef("");
 
   useEffect(() => {
@@ -85,50 +86,53 @@ export default function BaseUrlSelect({
     [requiresExternalUrl, tunnelEnabled, tunnelPublicUrl, tailscaleEnabled, tailscaleUrl, cloudEnabled, cloudUrl, savedPresets, withV1]
   );
 
-  // Sync mode & customInput from value/currentUrl (used both on init and on value change)
+  const normalizeUrl = (url) => (withV1 ? ensureV1(url) : stripSlash(url));
+
   const syncFromValue = (val, opts) => {
     if (!val) return;
-    const normalizedVal = stripSlash(val);
-    const savedMatch = opts.find((o) => o.saved && stripSlash(o.url) === normalizedVal);
-    const match = opts.find((o) => stripSlash(o.url) === normalizedVal);
+    const normalizedVal = normalizeUrl(val);
+    const savedMatch = opts.find((o) => o.saved && normalizeUrl(o.url) === normalizedVal);
+    const match = opts.find((o) => o.value !== CUSTOM_VALUE && normalizeUrl(o.url) === normalizedVal);
     const target = savedMatch || match;
-    
+
     if (target) {
       setMode(target.value);
       setCustomInput("");
+      customInputRef.current = "";
     } else {
       setMode(CUSTOM_VALUE);
       setCustomInput(val);
+      customInputRef.current = val;
     }
   };
 
-  // Initialize from value or currentUrl so saved custom endpoints are preserved
   useEffect(() => {
-    if (initializedRef.current) return;
     if (!presetsLoaded || options.length === 0) return;
+    const current = normalizeUrl(value || currentUrl);
+    if (initializedRef.current && currentUrlRef.current === current) return;
     initializedRef.current = true;
-    
-    const initVal = value || currentUrl;
-    if (initVal) {
-      syncFromValue(initVal, options);
+    currentUrlRef.current = current;
+
+    if (current) {
+      syncFromValue(current, options);
     } else {
-      const first = options.find((o) => o.value !== CUSTOM_VALUE);
-      if (first) {
-        setMode(first.value);
-        onChange(first.url);
-      } else {
-        setMode(CUSTOM_VALUE);
-      }
+      const target = options.find((o) => o.value !== CUSTOM_VALUE);
+      if (!target) return;
+      setMode(target.value);
+      onChange(target.url);
     }
-  }, [presetsLoaded, options, onChange, value, currentUrl]);
+  }, [presetsLoaded, options, onChange, value, currentUrl, withV1]);
 
   // Sync when value/currentUrl changes after init (e.g. status loaded from server)
   useEffect(() => {
     if (!initializedRef.current) return;
     const current = value || currentUrl;
     if (!current) return;
+    const normalized = normalizeUrl(current);
+    if (currentUrlRef.current === normalized) return;
+    currentUrlRef.current = normalized;
     syncFromValue(current, options);
-  }, [value, currentUrl, options]);
+  }, [value, currentUrl, options, withV1]);
 
   const handleSelect = (e) => {
     const next = e.target.value;
