@@ -9,6 +9,7 @@ import {
 import { APIKEY_PROVIDERS } from "@/shared/constants/config";
 import { AI_PROVIDERS, FREE_TIER_PROVIDERS, OAUTH_PROVIDERS, WEB_COOKIE_PROVIDERS, isOpenAICompatibleProvider, isAnthropicCompatibleProvider, isCustomEmbeddingProvider } from "@/shared/constants/providers";
 import { normalizeProviderId, normalizeProviderSpecificData } from "@/lib/providerNormalization";
+import { toProviderConnectionResponse } from "@/lib/providerConnectionResponse";
 
 export const dynamic = "force-dynamic";
 
@@ -68,14 +69,13 @@ export async function GET(request) {
       const name = isCompatible
         ? (c.name || nodeNameMap[c.provider] || c.providerSpecificData?.nodeName || c.provider)
         : c.name;
-      const conn = { ...c, name };
-      if (!exportMode) {
-        delete conn.apiKey;
-        delete conn.accessToken;
-        delete conn.refreshToken;
-        delete conn.idToken;
+      if (exportMode) {
+        return { ...c, name };
       }
-      return conn;
+      return {
+        ...toProviderConnectionResponse(c),
+        name,
+      };
     });
 
     return NextResponse.json({ connections: safeConnections });
@@ -120,7 +120,12 @@ export async function POST(request) {
     if (!provider || !isValidProvider) {
       return NextResponse.json({ error: "Invalid provider" }, { status: 400 });
     }
-    if (!apiKey && resolvedAuthType !== "oauth" && provider !== "ollama-local") {
+    // A provider may declare a providerSpecificData field that stands in for an API key — e.g.
+    // Bedrock's `profile`, where the credential lives in the local AWS config and there is no
+    // key to paste. Without this, following such a provider's own setup notice returns 400.
+    const apiKeySubstitute = AI_PROVIDERS[provider]?.apiKeyOptionalWith;
+    const hasApiKeySubstitute = !!(apiKeySubstitute && body.providerSpecificData?.[apiKeySubstitute]);
+    if (!apiKey && resolvedAuthType !== "oauth" && provider !== "ollama-local" && !hasApiKeySubstitute) {
       return NextResponse.json({ error: `${isWebCookieProvider ? "Cookie value" : "API Key"} is required` }, { status: 400 });
     }
     const connectionName = name || displayName || AI_PROVIDERS[provider]?.name;
@@ -195,14 +200,10 @@ export async function POST(request) {
       allowOverwrite: body.id ? true : (body.allowOverwrite === true || body.overwrite === true),
     });
 
-    // Hide sensitive fields
-    const result = { ...newConnection };
-    delete result.apiKey;
-    delete result.accessToken;
-    delete result.refreshToken;
-    delete result.idToken;
-
-    return NextResponse.json({ connection: result }, { status: 201 });
+    return NextResponse.json(
+      { connection: toProviderConnectionResponse(newConnection) },
+      { status: 201 },
+    );
   } catch (error) {
     if (error?.code === "PROVIDER_NAME_CONFLICT") {
       return NextResponse.json(
