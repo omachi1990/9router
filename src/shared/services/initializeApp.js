@@ -118,6 +118,11 @@ async function runHeavyStartup() {
   import("@/sse/services/backgroundTokenRefresh.js")
     .then(({ startBackgroundTokenRefresh }) => startBackgroundTokenRefresh())
     .catch((e) => console.log("[BackgroundTokenRefresh] scheduler start failed:", e.message));
+
+  // Auto-sync & health check for OpenCode / OpenCode Go free models
+  import("@/shared/services/opencodeFreeSync.js")
+    .then(({ startFreeModelAutoSync }) => startFreeModelAutoSync())
+    .catch((e) => console.log("[OpenCodeFreeSync] scheduler start failed:", e.message));
 }
 
 // Cheap local check: keeps the scheduler module (and its provider graph) unloaded

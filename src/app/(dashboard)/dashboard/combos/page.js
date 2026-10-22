@@ -64,9 +64,38 @@ export default function CombosPage() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkBusy, setBulkBusy] = useState(false);
   const { copied, copy } = useCopyToClipboard();
+  const [syncingFree, setSyncingFree] = useState(false);
+  const [freeSyncResult, setFreeSyncResult] = useState(null);
+  const [showFreeSyncModal, setShowFreeSyncModal] = useState(false);
+
+  const handleSyncFreeModels = async () => {
+    setSyncingFree(true);
+    try {
+      const res = await fetch("/api/combos/sync-free-models", { method: "POST" });
+      const data = await res.json();
+      setFreeSyncResult(data);
+      setShowFreeSyncModal(true);
+      await fetchData();
+    } catch (err) {
+      alert("Sync failed: " + err.message);
+    } finally {
+      setSyncingFree(false);
+    }
+  };
+
+  const fetchFreeSyncStatus = async () => {
+    try {
+      const res = await fetch("/api/combos/sync-free-models");
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.lastSync) setFreeSyncResult(data.lastSync);
+      }
+    } catch {}
+  };
 
   useEffect(() => {
     fetchData();
+    fetchFreeSyncStatus();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Drop stale selection when the combo list changes (delete / refresh).
@@ -358,7 +387,17 @@ export default function CombosPage() {
             {" "}Note: Cursor IDE itself often blocks built-in Composer / Grok from Override OpenAI Base URL (&quot;model does not support custom API&quot;); add them via Cursor&apos;s <span className="font-medium text-text-main">Add Custom Model</span> using the combo name, or pick a model Cursor allows through the custom endpoint.
           </p>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-stretch">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <Button
+            variant="secondary"
+            icon="sync"
+            loading={syncingFree}
+            onClick={handleSyncFreeModels}
+            className="w-full sm:w-auto whitespace-nowrap"
+            title="Auto-scan and test OpenCode Free & Go models, then update combo_free"
+          >
+            Sync Free Models
+          </Button>
           <Button icon="add" onClick={() => setShowCreateModal(true)} className="w-full sm:w-auto whitespace-nowrap">
             Create Combo
           </Button>
@@ -388,6 +427,103 @@ export default function CombosPage() {
           </div>
         </div>
       </div>
+
+      {/* OpenCode Free Models Auto-Sync Card */}
+      <Card padding="md" className="border-primary/20 bg-gradient-to-r from-primary/[0.03] to-transparent">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                <span className="material-symbols-outlined text-[24px]">auto_mode</span>
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-semibold text-text-main text-sm">OpenCode Free Auto-Sync & Health Check</h3>
+                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Tự động đồng bộ mỗi 1h
+                  </span>
+                  <span className="rounded bg-black/5 dark:bg-white/5 px-2 py-0.5 text-[11px] font-mono text-text-muted">
+                    Target: combo_free
+                  </span>
+                </div>
+                <p className="text-xs text-text-muted mt-0.5">
+                  Tự động quét danh sách model từ OpenCode Free & Go, gửi prompt probe kiểm tra thực tế (loại bỏ model bị limit/400 unavailable) và cập nhật danh sách vào <code className="font-mono text-primary font-semibold">combo_free</code>.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {freeSyncResult && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon="visibility"
+                  onClick={() => setShowFreeSyncModal(true)}
+                  className="whitespace-nowrap text-xs"
+                >
+                  Xem chi tiết ({freeSyncResult.passedCount || 0}/{freeSyncResult.candidatesCount || 0})
+                </Button>
+              )}
+              <Button
+                variant="primary"
+                size="sm"
+                icon="sync"
+                loading={syncingFree}
+                onClick={handleSyncFreeModels}
+                className="whitespace-nowrap text-xs"
+              >
+                {syncingFree ? "Đang quét & test..." : "Kiểm tra & Cập nhật ngay"}
+              </Button>
+            </div>
+          </div>
+
+          {/* Active Free Models Pills */}
+          {freeSyncResult?.passedModels && freeSyncResult.passedModels.length > 0 ? (
+            <div className="pt-2 border-t border-border/30 flex flex-col gap-1.5">
+              <div className="flex items-center justify-between text-[11px] text-text-muted">
+                <span>Các model free đang hoạt động tốt ({freeSyncResult.passedModels.length}):</span>
+                {freeSyncResult.timestamp && (
+                  <span>Đã kiểm tra: {new Date(freeSyncResult.timestamp).toLocaleTimeString()}</span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {freeSyncResult.passedModels.map((m) => {
+                  const item = (freeSyncResult.results || []).find((r) => r.model === m);
+                  return (
+                    <span
+                      key={m}
+                      className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 font-mono text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
+                    >
+                      <span className="size-1.5 rounded-full bg-emerald-500"></span>
+                      {m}
+                      {item?.latencyMs ? (
+                        <span className="text-[9px] text-emerald-600/70 dark:text-emerald-400/70 font-sans">
+                          ({item.latencyMs}ms)
+                        </span>
+                      ) : null}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="pt-2 border-t border-border/30 text-[11px] text-text-muted flex items-center justify-between">
+              <span>Chưa có dữ liệu kiểm tra gần nhất. Bấm <strong>&quot;Kiểm tra & Cập nhật ngay&quot;</strong> để quét và test các model free hiện tại.</span>
+            </div>
+          )}
+
+          {/* Quick usage note */}
+          <div className="text-[11px] text-text-muted bg-black/[0.02] dark:bg-white/[0.02] p-2 rounded-lg flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-text-main">Cách gọi trong client:</span>
+            <span>Đặt tên model là</span>
+            <code className="font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded text-[11px] font-semibold">combo_free</code>
+            <span>hoặc alias tiện lợi:</span>
+            <code className="font-mono bg-black/5 dark:bg-white/5 px-1 py-0.5 rounded text-[11px]">oc/free</code>
+            <code className="font-mono bg-black/5 dark:bg-white/5 px-1 py-0.5 rounded text-[11px]">ocg/free</code>
+            <code className="font-mono bg-black/5 dark:bg-white/5 px-1 py-0.5 rounded text-[11px]">free</code>
+          </div>
+        </div>
+      </Card>
 
       {/* Combos List */}
       {combos.length === 0 ? (
@@ -522,6 +658,70 @@ export default function CombosPage() {
         variant={confirmState?.variant || "danger"}
         loading={!!confirmState?.loading}
       />
+
+      {/* Free Models Sync & Test Result Modal */}
+      <Modal
+        isOpen={showFreeSyncModal}
+        onClose={() => setShowFreeSyncModal(false)}
+        title="OpenCode Free Models Health Check"
+      >
+        <div className="flex flex-col gap-4 text-xs">
+          <div className="flex items-center justify-between p-3 rounded-lg bg-black/5 dark:bg-white/5">
+            <div>
+              <p className="font-medium text-text-main">
+                {freeSyncResult?.passedCount ?? 0} / {freeSyncResult?.candidatesCount ?? 0} models hoạt động tốt
+              </p>
+              <p className="text-[11px] text-text-muted mt-0.5">
+                Đã tự động cập nhật vào combo <code className="font-mono text-primary font-semibold">combo_free</code>
+              </p>
+            </div>
+            <span className="material-symbols-outlined text-[28px] text-emerald-500">
+              check_circle
+            </span>
+          </div>
+
+          <div className="overflow-hidden rounded-lg border border-border/50 max-h-72 overflow-y-auto">
+            <table className="w-full text-left">
+              <thead className="bg-black/[0.03] dark:bg-white/[0.03] text-text-muted text-[11px] sticky top-0">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Model</th>
+                  <th className="px-3 py-2 font-medium text-center">Trạng thái</th>
+                  <th className="px-3 py-2 font-medium text-right">Chi tiết</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/30 font-mono text-[11px]">
+                {(freeSyncResult?.results || []).map((res, i) => (
+                  <tr key={i} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.02]">
+                    <td className="px-3 py-2 text-text-main font-medium">{res.model}</td>
+                    <td className="px-3 py-2 text-center">
+                      {res.ok ? (
+                        <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-sans font-medium">
+                          <span className="material-symbols-outlined text-[14px]">check</span> Sống ({res.latencyMs}ms)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-red-500 font-sans font-medium">
+                          <span className="material-symbols-outlined text-[14px]">close</span> Lỗi
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right text-text-muted max-w-[180px] truncate" title={res.error || "200 OK"}>
+                      {res.ok ? "Ready" : (res.error || `HTTP ${res.status}`)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="p-2.5 rounded bg-blue-500/10 text-blue-700 dark:text-blue-300 text-[11px]">
+            💡 <strong>Mẹo:</strong> Bạn có thể dùng tên model <code className="font-mono font-semibold">combo_free</code> hoặc các alias <code className="font-mono font-semibold">oc/free</code>, <code className="font-mono font-semibold">ocg/free</code>, <code className="font-mono font-semibold">free</code> trong các app/CLI. Hệ thống sẽ tự động điều hướng sang các model free đang sống.
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button onClick={() => setShowFreeSyncModal(false)}>Đóng</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

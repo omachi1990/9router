@@ -24,7 +24,7 @@
 // touches a provider account.
 import { getApiKeyByKey } from "@/lib/db/repos/apiKeysRepo.js";
 import { getCombos } from "@/lib/db/repos/combosRepo.js";
-import { getModelInfo, getComboModels } from "./model.js";
+import { getModelInfo, getComboModels, isVirtualFreeAlias } from "./model.js";
 import { resolveProviderId } from "@/shared/constants/providers.js";
 import {
   KEY_ACCESS_COMBO_OWNER,
@@ -126,7 +126,7 @@ export async function enforceKeyAccess(ctx, requested) {
   const sets = await getAllowSets(ctx);
   const comboModels = await getComboModels(requested);
   const allowed = comboModels
-    ? sets.combos.has(lower(requested))
+    ? sets.combos.has(lower(requested)) || (isVirtualFreeAlias(requested) && sets.combos.has("combo_free"))
     : await isModelStringAllowed(ctx, requested);
   return allowed ? null : keyAccessDeniedResponse(ctx, requested);
 }

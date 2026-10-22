@@ -32,10 +32,27 @@ export async function resolveModelAlias(alias) {
   return resolveModelAliasFromMap(alias, aliases);
 }
 
+export function isVirtualFreeAlias(modelStr) {
+  if (!modelStr || typeof modelStr !== "string") return false;
+  const lower = modelStr.toLowerCase().trim();
+  return (
+    lower === "free" ||
+    lower === "combo_free" ||
+    lower === "oc/free" ||
+    lower === "opencode/free" ||
+    lower === "ocg/free" ||
+    lower === "opencode-go/free"
+  );
+}
+
 /**
  * Get full model info (parse or resolve)
  */
 export async function getModelInfo(modelStr) {
+  if (isVirtualFreeAlias(modelStr)) {
+    return { provider: null, model: "combo_free" };
+  }
+
   const parsed = parseModel(modelStr);
 
   if (!parsed.isAlias) {
@@ -84,6 +101,13 @@ export async function getModelInfo(modelStr) {
  */
 export async function getComboModels(modelStr) {
   if (!modelStr) return null;
+
+  if (isVirtualFreeAlias(modelStr)) {
+    const combo = await getComboByName("combo_free");
+    if (combo && combo.models && combo.models.length > 0) {
+      return combo.models;
+    }
+  }
 
   let combo = await getComboByName(modelStr);
   if (combo && combo.models && combo.models.length > 0) {
