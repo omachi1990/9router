@@ -587,7 +587,6 @@ export async function handleComboChat({
       if (comboStrategy === "smart" && sessionId && modelStr === activeStickyModel) {
         clearStickyComboSession(comboName, sessionId);
       }
-      }
 
       // Extract error info from response
       let errorText = response?.statusText || "";
@@ -616,7 +615,6 @@ export async function handleComboChat({
       }
 
       // Check if should fallback to next model
-      // Check if should fallback to next model
       const { provider } = parseModel(modelStr);
       const { shouldFallback, cooldownMs, requestScoped } = checkFallbackError(statusCode, errorText, 0, provider);
 
@@ -637,7 +635,6 @@ export async function handleComboChat({
         finalErrorResponse.comboPath = comboPath;
         return finalErrorResponse;
       }
-      }
 
       // A request-scoped 4xx (validation failure, unsupported parameter, context
       // overflow) says this member cannot serve THIS request — not that the
@@ -647,10 +644,10 @@ export async function handleComboChat({
       // checkFallbackError() reports no account fallback here on purpose (a
       // request-scoped fault must not evict a healthy account from rotation).
       if (requestScoped) {
-        log.warn("COMBO", `Model ${modelStr} rejected the request (${result.status}), trying next`, { status: result.status });
-        lastError = errorText || String(result.status);
-        if (!lastStatus) lastStatus = result.status;
-        if (!requestScopedResult) requestScopedResult = result;
+        log.warn("COMBO", `Model ${modelStr} rejected the request (${statusCode}), trying next`, { status: statusCode });
+        lastError = errorText || String(statusCode);
+        if (!lastStatus) lastStatus = statusCode;
+        if (!requestScopedResult) requestScopedResult = targetResponse || result;
         continue;
       }
 
@@ -663,7 +660,6 @@ export async function handleComboChat({
         await new Promise(r => setTimeout(r, cooldownMs));
       }
 
-      // Fallback to next model
       // Fallback to next model
       lastError = errorText || String(statusCode);
       if (!lastStatus) lastStatus = statusCode;
