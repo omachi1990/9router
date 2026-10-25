@@ -1,0 +1,52 @@
+name: Auto-Sync Upstream
+
+on:
+  schedule:
+    # Run once every 12 hours
+    - cron: '0 */12 * * *'
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+permissions:
+  contents: write
+
+jobs:
+  sync-upstream:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add Upstream Remote & Fetch
+        run: |
+          git remote add upstream https://github.com/decolua/9router.git || true
+          git fetch upstream master --tags
+
+      - name: Check for New Commits
+        id: check
+        run: |
+          BEHIND_COUNT=$(git rev-list --count HEAD..upstream/master)
+          echo "behind_count=$BEHIND_COUNT" >> $GITHUB_OUTPUT
+          echo "Commits behind upstream: $BEHIND_COUNT"
+
+      - name: Merge Upstream Changes
+        if: steps.check.outputs.behind_count > 0
+        run: |
+          echo "Attempting automatic merge of upstream/master..."
+          git merge upstream/master -m "chore(auto-sync): merge upstream into fork" || {
+            echo "Auto-merge encountered conflicts. Aborting."
+            git merge --abort
+            exit 1
+          }
+
+      - name: Push to Fork
+        if: steps.check.outputs.behind_count > 0
+        run: |
+          git push origin master --tags
