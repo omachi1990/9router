@@ -72,7 +72,7 @@ export async function fetchFreeModelCandidates() {
           const id = m.id || m.name;
           if (!id || typeof id !== "string") continue;
           if (KNOWN_DEAD_FREE_MODELS.has(id)) continue;
-          if (id.endsWith("-free")) {
+          if (id.endsWith("-free") || KNOWN_FREE_MODELS.includes(id)) {
             candidates.push(`ocg/${id}`);
           }
         }

@@ -105,6 +105,14 @@ export async function getComboModels(modelStr) {
   if (isVirtualFreeAlias(modelStr)) {
     const combo = await getComboByName("combo_free");
     if (combo && combo.models && combo.models.length > 0) {
+      const lower = modelStr.toLowerCase().trim();
+      if (lower === "ocg/free" || lower === "opencode-go/free") {
+        const goModels = combo.models.filter((m) => m.startsWith("ocg/"));
+        if (goModels.length > 0) return goModels;
+      } else if (lower === "oc/free" || lower === "opencode/free") {
+        const zenModels = combo.models.filter((m) => m.startsWith("oc/"));
+        if (zenModels.length > 0) return zenModels;
+      }
       return combo.models;
     }
   }
