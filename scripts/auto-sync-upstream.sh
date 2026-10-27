@@ -77,12 +77,27 @@ log "Created safety backup branch: $BACKUP_BRANCH"
 # Attempt automatic merge
 MERGE_MSG="chore(auto-sync): merge upstream ($LATEST_UPSTREAM_COMMIT) into fork"
 if ! git merge upstream/master -m "$MERGE_MSG"; then
-  log "CONFLICT: Auto-merge encountered conflicts. Aborting merge to prevent repository corruption."
-  CONFLICTING_FILES="$(git diff --name-only --diff-filter=U | tr '\n' ',' | sed 's/,$//')"
-  git merge --abort
-  log "Conflicting files: $CONFLICTING_FILES"
-  write_status "conflict" "Auto-merge failed due to conflicts. Human or AI resolution required." ",\n  \"conflicts\": \"$CONFLICTING_FILES\""
-  exit 2
+  log "Notice: Auto-merge encountered conflicts. Checking if conflicts are auto-resolvable..."
+  
+  # Try resolving known conflict files (e.g. codex registry plan labels)
+  if [ -f "scripts/resolve-codex-conflict.mjs" ]; then
+    node scripts/resolve-codex-conflict.mjs || true
+    if ! git diff open-sse/providers/registry/codex.js | grep -q '<<<<<<<'; then
+      git add open-sse/providers/registry/codex.js 2>/dev/null || true
+    fi
+  fi
+
+  # Check if there are still unmerged files
+  REMAINING_CONFLICTS="$(git diff --name-only --diff-filter=U | tr '\n' ',' | sed 's/,$//')"
+  if [ -n "$REMAINING_CONFLICTS" ]; then
+    log "CONFLICT: Unresolvable conflicts remain: $REMAINING_CONFLICTS. Aborting merge to prevent repository corruption."
+    git merge --abort
+    write_status "conflict" "Auto-merge failed due to conflicts. Human or AI resolution required." ",\n  \"conflicts\": \"$REMAINING_CONFLICTS\""
+    exit 2
+  else
+    log "Conflicts were successfully auto-resolved! Concluding merge commit..."
+    git commit -m "$MERGE_MSG" || true
+  fi
 fi
 
 log "Merge succeeded cleanly without conflicts! Updating baseline snapshots..."
