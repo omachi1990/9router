@@ -18,14 +18,19 @@ export function resolveCodexConflict() {
     // For each model in the upstream block, inject requiredPlan if missing
     const lines = upstreamBlock.split("\n");
     const patchedLines = lines.map(line => {
-      if (line.includes("kind: \"image\"") || line.includes("kind: \"stt\"")) {
+      if (line.includes('kind: "image"') || line.includes('kind: "stt"')) {
         if (!line.includes("requiredPlan")) {
-          return line.replace(/(\s*)(},?)$/, '$1 requiredPlan: "plus" $2');
+          return line.replace(/(\s*)(},?)$/, ', requiredPlan: "plus"$2');
         }
       }
       if (line.includes('id: "codex-auto-review"') || line.includes('id: "gpt-daybreak-blue-latest"') || line.includes('id: "gpt-reserve"')) {
         if (!line.includes("requiredPlan")) {
-          return line.replace(/(\s*)(},?)$/, '$1 requiredPlan: "free" $2');
+          return line.replace(/(\s*)(},?)$/, ', requiredPlan: "free"$2');
+        }
+      }
+      if (line.includes('id: "gpt-6-astra[1m]"') || line.includes('id: "gpt-6-sol"') || line.includes('id: "gpt-6-luna"') || line.includes('id: "gpt-5.6-')) {
+        if (!line.includes("requiredPlan")) {
+          return line.replace(/(\s*)(},?)$/, ', requiredPlan: "pro"$2');
         }
       }
       return line;
