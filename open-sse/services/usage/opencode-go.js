@@ -1,72 +1,107 @@
-import { getAdapter } from "@/lib/db/driver.js";
+/**
+ * OpenCode Go usage — GET https://opencode.ai/inference/go/v1/usage
+ * Auth: Bearer <apiKey>
+ */
 
-export async function getOpenCodeGoUsage(connectionId) {
-  if (!connectionId) {
+import { proxyAwareFetch } from "../../utils/proxyFetch.js";
+import { parseResetTime, toFiniteNumber, U } from "./shared.js";
+
+const USAGE_URL = U("opencode-go").url;
+const QUOTA_NAMES = {
+  rolling: "Rolling",
+  weekly: "Weekly",
+  monthly: "Monthly",
+};
+
+function parsePercent(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+export async function getOpenCodeGoUsage(apiKey = null, proxyOptions = null) {
+  if (!apiKey || typeof apiKey !== "string" || !apiKey.trim()) {
     return {
-      plan: "OpenCode Go ($10/mo)",
-      message: "OpenCode Go includes $12 usage limits per 5h, $30 per week, and $60 per month. Check your console at opencode.ai/auth.",
-      quotas: {},
+      message: "OpenCode Go API key not available. Add a key to view usage.",
     };
   }
 
   try {
-    const db = await getAdapter();
-    const nowMs = Date.now();
-
-    // Query 5-hour cost
-    const limit5h = nowMs - 5 * 60 * 60 * 1000;
-    const row5h = db.get(
-      "SELECT COALESCE(SUM(cost), 0) as totalCost FROM usageHistory WHERE connectionId = ? AND timestamp >= ? AND status = 'ok'",
-      [connectionId, new Date(limit5h).toISOString()]
-    );
-    const cost5h = row5h?.totalCost || 0;
-
-    // Query 7-day cost
-    const limit7d = nowMs - 7 * 24 * 60 * 60 * 1000;
-    const row7d = db.get(
-      "SELECT COALESCE(SUM(cost), 0) as totalCost FROM usageHistory WHERE connectionId = ? AND timestamp >= ? AND status = 'ok'",
-      [connectionId, new Date(limit7d).toISOString()]
-    );
-    const cost7d = row7d?.totalCost || 0;
-
-    // Query 30-day cost
-    const limit30d = nowMs - 30 * 24 * 60 * 60 * 1000;
-    const row30d = db.get(
-      "SELECT COALESCE(SUM(cost), 0) as totalCost FROM usageHistory WHERE connectionId = ? AND timestamp >= ? AND status = 'ok'",
-      [connectionId, new Date(limit30d).toISOString()]
-    );
-    const cost30d = row30d?.totalCost || 0;
-
-    return {
-      plan: "OpenCode Go ($10/mo)",
-      message: "Estimated usage based on requests routed through 9router. View official billing details at opencode.ai/auth.",
-      quotas: {
-        "5-Hour Window ($12)": {
-          used: Number(cost5h.toFixed(4)),
-          total: 12,
-          remaining: Number(Math.max(0, 12 - cost5h).toFixed(4)),
-          unlimited: false,
-        },
-        "Weekly Window ($30)": {
-          used: Number(cost7d.toFixed(4)),
-          total: 30,
-          remaining: Number(Math.max(0, 30 - cost7d).toFixed(4)),
-          unlimited: false,
-        },
-        "Monthly Window ($60)": {
-          used: Number(cost30d.toFixed(4)),
-          total: 60,
-          remaining: Number(Math.max(0, 60 - cost30d).toFixed(4)),
-          unlimited: false,
+    const response = await proxyAwareFetch(
+      USAGE_URL,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${apiKey.trim()}`,
+          Accept: "application/json",
         },
       },
-    };
+      proxyOptions,
+    );
+
+    if (response.status === 401) {
+      return {
+        plan: "OpenCode Go",
+        message: "OpenCode Go authentication failed. Check the API key.",
+      };
+    }
+
+    if (response.status === 403) {
+      const error = await response.json().catch(() => null);
+      const subscriptionRequired = error?.error?.type === "EntitlementError";
+      return {
+        plan: "OpenCode Go",
+        message: subscriptionRequired
+          ? "OpenCode Go subscription required for this API key."
+          : "OpenCode Go access forbidden for this API key.",
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        plan: "OpenCode Go",
+        message: `OpenCode Go usage API error (${response.status}).`,
+      };
+    }
+
+    const data = await response.json().catch(() => null);
+    if (!data?.usage || typeof data.usage !== "object") {
+      return {
+        plan: "OpenCode Go",
+        message: "OpenCode Go usage response did not contain quota data.",
+      };
+    }
+
+    const quotas = {};
+    for (const [period, name] of Object.entries(QUOTA_NAMES)) {
+      const quota = data.usage[period];
+      if (!quota || typeof quota !== "object") continue;
+      const percent = parsePercent(quota.percent);
+      if (percent === null) continue;
+      const used = Math.max(0, Math.min(100, toFiniteNumber(percent, 0)));
+      quotas[name] = {
+        used,
+        total: 100,
+        remaining: 100 - used,
+        remainingPercentage: 100 - used,
+        resetAt: parseResetTime(quota.resetsAt),
+        unlimited: false,
+      };
+    }
+
+
+    if (Object.keys(quotas).length === 0) {
+      return {
+        plan: "OpenCode Go",
+        message: "OpenCode Go usage response did not contain valid quota data.",
+      };
+    }
+
+    return { plan: "OpenCode Go", quotas };
   } catch (error) {
-    console.error("[OpenCode Go Usage] Error fetching from DB:", error);
-    return {
-      plan: "OpenCode Go ($10/mo)",
-      message: `OpenCode Go connected. Unable to calculate local usage: ${error.message}. View official details at opencode.ai/auth.`,
-      quotas: {},
-    };
+    return { message: `OpenCode Go error: ${error.message}` };
   }
 }
