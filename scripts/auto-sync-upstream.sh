@@ -53,7 +53,7 @@ fi
 
 # Fetch upstream and origin
 log "Fetching upstream and origin..."
-git fetch upstream master --tags --quiet
+git fetch upstream master --tags --force --quiet
 git fetch origin master --quiet
 
 # Check how many commits upstream is ahead
